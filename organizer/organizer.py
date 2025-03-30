@@ -40,7 +40,7 @@ from typing import List, Any, Optional, Dict, Union
 
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from PyQt5.QtCore import QUrl
+from PyQt5.QtCore import QUrl, QRunnable, QThreadPool, pyqtSlot
 from send2trash import send2trash
 
 from organizer.utils import (
@@ -49,13 +49,14 @@ from organizer.utils import (
     open_file_location,
     compute_hash,
     unify_detected_key,
-    detect_key_from_filename
+    detect_key_from_filename, 
+    CacheManager
 )
 
 warnings.filterwarnings("ignore", message="This function was moved to 'librosa.feature.rhythm.tempo'")
 logger: logging.Logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
+cache_manager = CacheManager()
 
 try:
     from tinytag import TinyTag
@@ -86,6 +87,7 @@ ENABLE_ADVANCED_AUDIO_ANALYSIS = (librosa is not None)
 ENABLE_WAVEFORM_PREVIEW = (plt is not None and np is not None)
 AUDIO_EXTENSIONS = {".wav", ".aiff", ".flac", ".mp3", ".ogg"}
 
+
 KEY_REGEX = re.compile(
     r'(?:^|[^a-zA-Z])'                  # Start of string or non-alpha
     r'(?P<root>[A-G]'                   # Root letter
@@ -96,6 +98,7 @@ KEY_REGEX = re.compile(
     r'(?:[^a-zA-Z]|$)',                 # Non-alpha or end of string
     flags=re.IGNORECASE
 )
+
 
 
 # -------------------------- File Scanning --------------------------
@@ -123,70 +126,103 @@ class FileScanner(QtCore.QThread):
         self.bpm_detection = bpm_detection
 
     def run(self) -> None:
+        # Initialize total file counter
         total_files = 0
         for _, _, filenames in os.walk(self.root_path):
             total_files += len(filenames)
+        
+        # Initialize list to store file information and current file counter
         files_info = []
         current_count = 0
+
+        # Walk through the directory tree starting from root_path
         for dirpath, _, filenames in os.walk(self.root_path):
             for f in filenames:
+                # Construct full file path
                 raw_path = os.path.join(dirpath, f)
                 full_path = os.path.normpath(os.path.abspath(raw_path))
                 try:
+                    # Get file statistics
                     stat = os.stat(full_path)
                     size = stat.st_size
-                    mod_time = datetime.datetime.fromtimestamp(stat.st_mtime)
+                    mod_time_ts = stat.st_mtime
+                    mod_time = datetime.datetime.fromtimestamp(mod_time_ts)
+                    
+                    # Initialize file information dictionary
                     file_info = {
                         'path': full_path,
                         'size': size,
                         'mod_time': mod_time,
-                        'duration': None,   # For audio files
-                        'bpm': None,        # Advanced analysis: BPM
-                        'key': "N/A",       # Placeholder for key detection
-                        'used': False,      # Mark if file has been used
-                        'tags': ""          # Custom tags (editable)
+                        'duration': None,
+                        'bpm': None,
+                        'key': "N/A",
+                        'used': False,
+                        'tags': os.path.splitext(f)[1][1:].upper() if os.path.splitext(f)[1] else ""
                     }
-                    ext = os.path.splitext(full_path)[1].lower()
-                    # Add default tag based on file extension
-                    if ext:
-                        file_info['tags'] = ext[1:].upper()
 
-                    if ext in AUDIO_EXTENSIONS:
-                        # Extract basic audio metadata with TinyTag if available
-                        if TinyTag is not None:
-                            try:
-                                tag = TinyTag.get(full_path)
-                                file_info['duration'] = tag.duration
-                                file_info['samplerate'] = tag.samplerate
-                                file_info['channels'] = tag.channels
-                            except Exception as e:
-                                logger.error(f"Error reading audio metadata for {full_path}: {e}")
-                        # Perform BPM detection only if enabled
-                        if ENABLE_ADVANCED_AUDIO_ANALYSIS and self.bpm_detection:
-                            try:
-                                logger.debug(f"Loading file {full_path} with explicit parameters")
-                                y, sr = librosa.load(full_path,
-                                                     sr=None,
-                                                     offset=0.0,
-                                                     duration=None,
-                                                     dtype=np.float32,
-                                                     res_type='kaiser_best')
-                                if y is None or len(y) == 0:
-                                    logger.warning(f"Warning: {full_path} produced no audio data.")
-                                    file_info['bpm'] = None
-                                else:
-                                    # Use the deprecated alias with keyword arguments
-                                    tempo = librosa.beat.tempo(y=y, sr=sr)
-                                    file_info['bpm'] = round(float(tempo[0])) if tempo.size > 0 else None
-                            except Exception as e:
-                                logger.error(f"Error computing BPM for {full_path}: {e}", exc_info=True)
-                                file_info['bpm'] = None
+                    # Attempt to retrieve cached metadata
+                    cached = cache_manager.get(full_path, mod_time_ts, size)
+                    if cached:
+                        # Update file information with cached data
+                        file_info.update(cached)
+                    else:
+                        ext = os.path.splitext(full_path)[1].lower()
+                        if ext in AUDIO_EXTENSIONS:
+                            # Process audio file metadata
+                            if TinyTag is not None:
+                                try:
+                                    # Extract metadata using TinyTag
+                                    tag = TinyTag.get(full_path)
+                                    file_info['duration'] = tag.duration
+                                    file_info['samplerate'] = tag.samplerate
+                                    file_info['channels'] = tag.channels
+                                except Exception as e:
+                                    logger.error(f"Error reading audio metadata for {full_path}: {e}")
+                            if ENABLE_ADVANCED_AUDIO_ANALYSIS and self.bpm_detection:
+                                try:
+                                    # Load audio data using librosa
+                                    y, sr = librosa.load(full_path,
+                                                         sr=None,
+                                                         offset=0.0,
+                                                         duration=None,
+                                                         dtype=np.float32,
+                                                         res_type='kaiser_best')
+                                    if y is None or len(y) == 0:
+                                        logger.warning(f"Warning: {full_path} produced no audio data.")
+                                        file_info['bpm'] = None
+                                    else:
+                                        # Compute BPM using librosa
+                                        tempo = librosa.beat.tempo(y=y, sr=sr)
+                                        file_info['bpm'] = round(float(tempo[0])) if tempo.size > 0 else None
+                                except Exception as e:
+                                    logger.error(f"Error computing BPM for {full_path}: {e}", exc_info=True)
+                        
+                        # Optionally detect key from filename
+                        file_info['key'] = detect_key_from_filename(full_path)
+                        
+                        # Update cache after processing
+                        cache_manager.update(full_path, mod_time_ts, size, {
+                            'duration': file_info.get('duration'),
+                            'bpm': file_info.get('bpm'),
+                            'key': file_info.get('key'),
+                            'samplerate': file_info.get('samplerate', None),
+                            'channels': file_info.get('channels', None)
+                        })
+                    
+                    # Add file information to the list
                     files_info.append(file_info)
                 except Exception as e:
                     logger.error(f"Error scanning {full_path}: {e}")
+                
+                # Increment current file counter and emit progress signal every 100 files
                 current_count += 1
                 if current_count % 100 == 0:
                     self.progress.emit(current_count, total_files)
+        
+        # Save cache at the end of scanning
+        cache_manager.save_cache()
+        
+        # Emit finished signal with the collected file information
         self.finished.emit(files_info)
 
 # -------------------------- File Table Model --------------------------
@@ -670,6 +706,18 @@ class RecommendationsDialog(QtWidgets.QDialog):
         btn_close = QtWidgets.QPushButton("Close")
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
+
+class HashWorker(QRunnable):
+    def __init__(self, file_info):
+        super().__init__()
+        self.file_info = file_info
+
+    @pyqtSlot()
+    def run(self):
+        # Compute hash for this file, if not already computed or cached
+        file_path = self.file_info['path']
+        hash_result = compute_hash(file_path)
+        self.file_info['hash'] = hash_result
 
 # -------------------------- Main Window --------------------------
 class MainWindow(QtWidgets.QMainWindow):
@@ -1259,6 +1307,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.updateSummary()
         self.progressBar.setValue(100)
 
+    def openSelectedFileLocation(self) -> None:
+        """
+        Open the folder containing the selected file.
+        If no file is selected, show an informational message.
+        """
+        file_path = self.getSelectedFilePath()
+        if file_path:
+            open_file_location(file_path)
+        else:
+            QtWidgets.QMessageBox.information(self, "No Selection", "Please select a file first.")
+
     # -------------------------- Filtering Methods --------------------------
     def onFilterTextChanged(self, text: str) -> None:
         """
@@ -1387,48 +1446,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 parent=self
             )
             dialog.exec_()
-
-    class DuplicateFinder(QtCore.QThread):
-        """
-        Thread to find duplicate files by grouping by size and comparing MD5 hashes.
-        Emits a list of duplicate groups.
-        """
-        finished = QtCore.pyqtSignal(list)
-
-        def __init__(self, files_info: List[Dict[str, Any]], parent: Optional[QtCore.QObject] = None) -> None:
-            """
-            Initialize the DuplicateFinder.
-            
-            Args:
-                files_info (List[Dict[str, Any]]): List of file metadata dictionaries.
-                parent (Optional[QtCore.QObject]): Parent object.
-            """
-            super().__init__(parent)
-            self.files_info = files_info
-
-        def run(self) -> None:
-            """
-            Execute the duplicate detection algorithm.
-            """
-            size_dict = {}
-            for info in self.files_info:
-                size = info['size']
-                size_dict.setdefault(size, []).append(info)
-            duplicate_groups = []
-            for size, files in size_dict.items():
-                if len(files) < 2:
-                    continue
-                hash_dict = {}
-                for info in files:
-                    file_hash = compute_hash(info['path'])
-                    if file_hash is None:
-                        continue
-                    info['hash'] = file_hash
-                    hash_dict.setdefault(file_hash, []).append(info)
-                for file_hash, group in hash_dict.items():
-                    if len(group) > 1:
-                        duplicate_groups.append(group)
-            self.finished.emit(duplicate_groups)
 
     # -------------------------- Audio Preview --------------------------
     def previewSelected(self) -> None:
@@ -1590,6 +1607,69 @@ class MainWindow(QtWidgets.QMainWindow):
         if folder:
             self.cubase_folder = folder
             QtWidgets.QMessageBox.information(self, "Cubase Folder Set", f"Cubase folder set to: {folder}")
+
+    # -------------------------- Duplicate Finder Thread --------------------------
+    class DuplicateFinder(QtCore.QThread):
+        """
+        Thread to find duplicate files by grouping by size and comparing MD5 hashes.
+        Hash computations are offloaded to a QThreadPool using HashWorker.
+        Emits a list of duplicate groups.
+        """
+        finished = QtCore.pyqtSignal(list)
+
+        def __init__(self, files_info: List[Dict[str, Any]], parent: Optional[QtCore.QObject] = None) -> None:
+            """
+            Initialize the DuplicateFinder.
+            
+            Args:
+                files_info (List[Dict[str, Any]]): List of file metadata dictionaries.
+                parent (Optional[QtCore.QObject]): Parent object.
+            """
+            super().__init__(parent)
+            self.files_info = files_info
+
+        def run(self) -> None:
+            """
+            Execute the duplicate detection algorithm.
+            """
+            # Group files by size.
+            size_dict = {}
+            for info in self.files_info:
+                size = info['size']
+                size_dict.setdefault(size, []).append(info)
+
+            # Create a local QThreadPool instance for hash computations.
+
+            pool = QThreadPool()
+
+            # Submit hash computation tasks for each file in groups with potential duplicates.
+            for size, files in size_dict.items():
+                if len(files) < 2:
+                    continue
+                for info in files:
+                    pool.start(HashWorker(info))
+            
+            # Wait for all submitted hash workers to finish.
+            pool.waitForDone()
+
+            # Group files by computed hash within each size group.
+            duplicate_groups = []
+            for size, files in size_dict.items():
+                if len(files) < 2:
+                    continue
+                hash_dict = {}
+                for info in files:
+                    file_hash = info.get('hash')
+                    if file_hash is None:
+                        continue
+                    hash_dict.setdefault(file_hash, []).append(info)
+
+                # If more than one file share the same hash, they are duplicates.
+                for file_hash, group in hash_dict.items():
+                    if len(group) > 1:
+                        duplicate_groups.append(group)
+            
+            self.finished.emit(duplicate_groups)
 
 # -------------------------- Main --------------------------
 def main() -> None:
