@@ -1199,11 +1199,15 @@ class MainWindow(QtWidgets.QMainWindow):
             "1. Select Folder: Choose a directory with music samples.\n"
             "2. Filter: Type in the left panel to filter files by name.\n"
             "3. Edit Metadata: Double-click Duration, BPM, Key, or Tags in the table.\n"
-            "4. Duplicates: Use the toolbar to find duplicate files.\n"
-            "5. Preview Audio: Use the toolbar to preview or stop preview.\n"
+            "4. Duplicates: Use the toolbar to find duplicate files using MD5 hashing.\n"
+            "5. Preview Audio: Use the toolbar to preview or stop preview of audio file.\n"
             "6. Waveform: View waveform for audio files.\n"
-            "7. Delete Selected: Click 'Delete Selected' on the toolbar.\n"
-            "8. Progress Bar: Scanning and duplicate detection run in background threads (using QThread), ensuring the UI remains responsive during lengthy operations.\n"
+            "7. Delete Selected: Click 'Delete Selected' on the toolbar to send files to recycle bin or delete permanently.\n"
+            "8. Cubase Integration: Set Cubase folder and send files directly.\n"
+            "9. Progress Bar: Scanning and duplicate detection run in background threads (using QThread), ensuring the UI remains responsive during lengthy operations.\n"
+            "10. Sorting: Click on column headers to sort files by different attributes.\n"
+            "11. Theme: Click the 'Theme' menu to switch between light and dark themes."
+
         )
         QtWidgets.QMessageBox.information(self, "Usage Help", help_text)
 
