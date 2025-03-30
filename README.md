@@ -5,7 +5,7 @@ Here is **Musicians Organizer** a tool for music producers, sound engineers or j
 ## What It Does
 
 - **Scan Your Folders:**  
-  Recursively scans directories to gather file details like size, modification date, and audio metadata (duration, sample rate, channels).
+  Recursively scans directories to gather file details like size, name, modification date, and audio metadata (duration, sample rate, channels).
 
 - **Filtering & Searching:**
   Use filters to quickly find samples by name or see only unused samples.
