@@ -178,24 +178,30 @@ class FileScanner(QtCore.QThread):
                                     file_info['channels'] = tag.channels
                                 except Exception as e:
                                     logger.error(f"Error reading audio metadata for {full_path}: {e}")
+                                    
+                            # BPM detection only for audio files
                             if ENABLE_ADVANCED_AUDIO_ANALYSIS and self.bpm_detection:
                                 try:
-                                    # Load audio data using librosa
+                                    # Optionally limit the duration to a fixed length (e.g., 60 seconds) to prevent huge arrays
                                     y, sr = librosa.load(full_path,
-                                                         sr=None,
-                                                         offset=0.0,
-                                                         duration=None,
-                                                         dtype=np.float32,
-                                                         res_type='kaiser_best')
+                                                        sr=None,
+                                                        offset=0.0,
+                                                        duration=60.0,   # Limit analysis to first 60 seconds
+                                                        dtype=np.float32,
+                                                        res_type='kaiser_best')
                                     if y is None or len(y) == 0:
                                         logger.warning(f"Warning: {full_path} produced no audio data.")
                                         file_info['bpm'] = None
                                     else:
-                                        # Compute BPM using librosa
                                         tempo = librosa.beat.tempo(y=y, sr=sr)
                                         file_info['bpm'] = round(float(tempo[0])) if tempo.size > 0 else None
                                 except Exception as e:
                                     logger.error(f"Error computing BPM for {full_path}: {e}", exc_info=True)
+                                    file_info['bpm'] = None
+                        else:
+                            # Skip BPM detection if not an audio file.
+                            file_info['bpm'] = None
+
                         
                         # Optionally detect key from filename
                         file_info['key'] = detect_key_from_filename(full_path)
@@ -231,7 +237,19 @@ class FileTableModel(QtCore.QAbstractTableModel):
     Custom model to hold file data.
     Columns: File Path, Size, Modified Date, Duration, BPM, Key, Used, Tags, Sample Rate, Channels.
     """
-    COLUMN_HEADERS = ["File Path", "Size", "Modified Date", "Duration", "BPM", "Key", "Used", "Tags", "Sample Rate", "Channels"]
+    COLUMN_HEADERS = [
+        "File Path",      # col 0: Folder path only
+        "File Name",      # col 1: Just the basename
+        "Size",           # col 2
+        "Modified Date",  # col 3
+        "Duration",       # col 4
+        "BPM",            # col 5
+        "Key",            # col 6
+        "Used",           # col 7
+        "Sample Rate",    # col 8
+        "Channels",       # col 9
+        "Tags"            # col 10
+    ]
 
     def __init__(self, files: Optional[List[Dict[str, Any]]] = None, size_unit: str = "KB", parent: Optional[QtCore.QObject] = None) -> None:
         """
@@ -255,33 +273,43 @@ class FileTableModel(QtCore.QAbstractTableModel):
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
         if not index.isValid():
             return None
+
         file_info = self._files[index.row()]
         col = index.column()
+
         if role == QtCore.Qt.DisplayRole:
             if col == 0:
-                return file_info['path']
+                # Return folder path only (exclude the file name)
+                return os.path.dirname(file_info['path'])
             elif col == 1:
-                return self.format_size(file_info['size'])
+                # Return the file name only
+                return os.path.basename(file_info['path'])
             elif col == 2:
-                return file_info['mod_time'].strftime("%Y-%m-%d %H:%M:%S")
+                return self.format_size(file_info['size'])
             elif col == 3:
-                # Duration is stored as seconds; format for display.
-                return format_duration(file_info.get('duration'))
+                return file_info['mod_time'].strftime("%Y-%m-%d %H:%M:%S")
             elif col == 4:
-                return str(file_info.get('bpm', ""))
+                return format_duration(file_info.get('duration'))
             elif col == 5:
-                return file_info.get('key', "")
+                return str(file_info.get('bpm', ""))
             elif col == 6:
-                return ""  # Check state handled via CheckStateRole.
+                return file_info.get('key', "")
             elif col == 7:
-                return file_info.get('tags', "")
+                # "Used" is handled by CheckStateRole, so display empty text here.
+                return ""
             elif col == 8:
                 return str(file_info.get('samplerate', ""))
             elif col == 9:
                 return str(file_info.get('channels', ""))
-        if role == QtCore.Qt.CheckStateRole and col == 6:
+            elif col == 10:
+                return file_info.get('tags', "")
+
+        # Ensure the "Used" checkbox is displayed correctly in col 7.
+        if role == QtCore.Qt.CheckStateRole and col == 7:
             return QtCore.Qt.Checked if file_info.get('used', False) else QtCore.Qt.Unchecked
+
         return None
+
 
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation, role: int = QtCore.Qt.DisplayRole) -> Any:
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
@@ -290,19 +318,21 @@ class FileTableModel(QtCore.QAbstractTableModel):
         return None
 
     def flags(self, index: QtCore.QModelIndex) -> QtCore.Qt.ItemFlags:
-        """
-        Modify flags to allow editing for Duration (3), BPM (4), Key (5), and Tags (7).
-        """
         if not index.isValid():
             return QtCore.Qt.ItemIsEnabled
+
         base_flags = QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled
-        if index.column() == 6:
-            # "Used" column: checkable and editable.
+        col = index.column()
+
+        # "Used" column remains at index 7.
+        if col == 7:
             return base_flags | QtCore.Qt.ItemIsUserCheckable | QtCore.Qt.ItemIsEditable
-        elif index.column() in [3, 4, 5, 7]:
-            # Enable in-place editing for Duration, BPM, Key, and Tags.
+        # Allow editing for Duration (col 4), BPM (col 5), Key (col 6), and Tags (col 10)
+        elif col in [4, 5, 6, 10]:
             return base_flags | QtCore.Qt.ItemIsEditable
-        return base_flags
+        else:
+            return base_flags
+
 
 
     def setData(self, index: QtCore.QModelIndex, value: Any, role: int = QtCore.Qt.EditRole) -> bool:
@@ -314,36 +344,38 @@ class FileTableModel(QtCore.QAbstractTableModel):
         """
         if not index.isValid():
             return False
+
         file_info = self._files[index.row()]
         col = index.column()
-        if role == QtCore.Qt.CheckStateRole and col == 6:
+
+        # Handle check state for "Used" in column 7.
+        if role == QtCore.Qt.CheckStateRole and col == 7:
             file_info['used'] = (value == QtCore.Qt.Checked)
             self.dataChanged.emit(index, index, [role])
             return True
+
         if role == QtCore.Qt.EditRole:
-            if col == 3:  # Duration column
-                # Convert input "mm:ss" to seconds.
+            if col == 4:  # Duration
                 new_duration = self._parse_duration(value)
                 if new_duration is not None:
                     file_info['duration'] = new_duration
                 else:
-                    # Reject invalid duration formats.
                     return False
-            elif col == 4:  # BPM column
+            elif col == 5:  # BPM
                 try:
                     file_info['bpm'] = int(value) if value.strip() else None
                 except ValueError:
                     return False
-            elif col == 5:  # Key column
-                # Store key in uppercase for consistency.
+            elif col == 6:  # Key
                 file_info['key'] = value.strip().upper() if value else ""
-            elif col == 7:  # Tags column
+            elif col == 10:  # Tags
                 file_info['tags'] = value
             else:
-                # Other columns are not editable.
                 return False
+
             self.dataChanged.emit(index, index, [role])
             return True
+
         return False
 
     def _parse_duration(self, text: str) -> Optional[float]:
