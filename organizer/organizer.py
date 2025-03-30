@@ -707,6 +707,7 @@ class RecommendationsDialog(QtWidgets.QDialog):
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
+# ------------ Hash Worker ------------
 class HashWorker(QRunnable):
     def __init__(self, file_info):
         super().__init__()
@@ -789,7 +790,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Action: Open Folder
         actOpenFolder = QtWidgets.QAction("Open Folder", self)
         actOpenFolder.setToolTip("Open the folder of the selected file.")
-        actOpenFolder.triggered.connect(lambda: open_file_location(self.getSelectedFilePath()))
+        actOpenFolder.triggered.connect(self.openSelectedFileLocation)
         self.fileToolBar.addAction(actOpenFolder)
 
         # Action: Delete Selected
@@ -941,8 +942,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStatusBar(QtWidgets.QStatusBar())
 
         # ------------------- Help & Theme Menu -------------------
-        # Use the light theme as default.
-        self.setTheme("light")
+        
         menuBar = self.menuBar()
         helpMenu = menuBar.addMenu("Help")
         helpAction = QtWidgets.QAction("Usage Help", self)
@@ -951,10 +951,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         themeMenu = menuBar.addMenu("Theme")
         actLight = QtWidgets.QAction("Light Mode", self)
-        actLight.triggered.connect(lambda: self.setTheme("light"))
+        actLight.triggered.connect(lambda: self.setTheme("light", save=True))
         themeMenu.addAction(actLight)
         actDark = QtWidgets.QAction("Dark Mode", self)
-        actDark.triggered.connect(lambda: self.setTheme("dark"))
+        actDark.triggered.connect(lambda: self.setTheme("dark", save=True))
         themeMenu.addAction(actDark)
 
 
@@ -1145,21 +1145,23 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
 
 
-    def setTheme(self, theme: str) -> None:
+    def setTheme(self, theme: str, save: bool = True) -> None:
         """
-        Apply the selected theme and save the preference.
+        Apply the selected theme and optionally save the preference.
         
         Args:
             theme (str): "light" or "dark"
+            save (bool): Whether to persist the theme change immediately.
         """
-        self.theme = theme
-        if theme.lower() == "dark":
+        self.theme = theme.lower()
+        if self.theme == "dark":
             self.applyDarkThemeStylesheet()
         else:
             self.applyLightThemeStylesheet()
-        # Save the theme preference
-        settings = QtCore.QSettings("MMSoftware", "MusiciansOrganizer")
-        settings.setValue("theme", theme)
+
+        # Only persist the theme (and geometry) if explicitly requested
+        if save:
+            self.saveSettings()
 
     def showHelpDialog(self) -> None:
         """
@@ -1196,8 +1198,12 @@ class MainWindow(QtWidgets.QMainWindow):
         Load persisted user settings.
         """
         settings = QtCore.QSettings("MMSoftware", "MusiciansOrganizer")
-        self.restoreGeometry(settings.value("windowGeometry", b""))
-        self.restoreState(settings.value("windowState", b""))
+        geometry = settings.value("windowGeometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        state = settings.value("windowState")
+        if state:
+            self.restoreState(state)
         self.last_folder = settings.value("lastFolder", "")
         self.size_unit = settings.value("sizeUnit", "KB")
         self.comboSizeUnit.setCurrentText(self.size_unit)
@@ -1206,7 +1212,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cubase_folder = settings.value("cubaseFolder", "")
         # Load theme preference, defaulting to "light"
         self.theme = settings.value("theme", "light")
-        self.setTheme(self.theme)
+        # Apply the theme without immediately saving
+        self.setTheme(self.theme, save=False)
 
     def saveSettings(self) -> None:
         """
@@ -1676,6 +1683,10 @@ def main() -> None:
     """
     Entry point of the application.
     """
+    # Set application details for QSettings to use.
+    QtCore.QCoreApplication.setOrganizationName("MMSoftware")
+    QtCore.QCoreApplication.setApplicationName("MusiciansOrganizer")
+
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow()
     window.show()
