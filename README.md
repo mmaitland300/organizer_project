@@ -38,14 +38,13 @@ Follow these steps to get Musicians Organizer up and running on your machine!
 - **Python 3.7+** (Recommend Python 3.11 to work with the librosa library)
 - [pip](https://pip.pypa.io/en/stable/) installed
 
-### Installation
+## Installation
 
-1. **Clone the Repository:**
+ #### Clone the Repository:
 
-    ```bash
     git clone https://github.com/mmaitland300/organizer_project.git
     cd organizer_project
-    ```
+  
 
 ### Install Virtual Environment and requirements
 
