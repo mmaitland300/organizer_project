@@ -14,6 +14,7 @@ ENV/
 env.bak/
 venv.bak/
 
+
 #  PyInstaller Build Folders
 
 build/
@@ -33,6 +34,9 @@ coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
+organizer3.26.py
+organizer3.29.py
+.gitignore
 
 #  Package Distribution & Eggs
 
