@@ -1,11 +1,11 @@
 # Musicians Organizer
 
-Here is **Musicians Organizer** – an all-in-one tool for music producers, sound engineers or just fans of music with large unmanageable collections, to help manage their music or sample libraries. Whether you’re looking to clean up your folders, get detailed file info, detect duplicates, or auto-tag audio samples, this application can provide.
+Here is **Musicians Organizer** a tool for music producers, sound engineers or just fans of music with large unmanageable collections, to help manage their music or sample libraries. Whether you’re looking to clean up your folders, get detailed file info, detect duplicates, or auto-tag audio samples, this application can provide.
 
 ## What It Does
 
 - **Scan Your Folders:**  
-  Recursively scans directories to gather file details like size, modification date, and audio metadata (duration, sample rate, channels).
+  Recursively scans directories to gather file details like size, name, modification date, and audio metadata (duration, sample rate, channels).
 
 - **Filtering & Searching:**
   Use filters to quickly find samples by name or see only unused samples.
@@ -27,9 +27,6 @@ Here is **Musicians Organizer** – an all-in-one tool for music producers, soun
 
 - **Persistent Settings:**  
   Preferences (like window size, last scanned folder, theme, etc.) are saved automatically.
-
- **Theme Switching:** 
- Enjoy a standard light mode by default, with an option to switch to dark mode via the Theme menu.
 
 ## Getting Started
 Follow these steps to get Musicians Organizer up and running on your machine!
