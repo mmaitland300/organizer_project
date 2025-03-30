@@ -1,6 +1,6 @@
 # Musicians Organizer
 
-Here is **Musicians Organizer** – an all-in-one tool for music producers, sound engineers or just fans of music with large unmanageable collections, to help manage their music or sample libraries. Whether you’re looking to clean up your folders, get detailed file info, detect duplicates, or auto-tag audio samples, this application can provide.
+Here is **Musicians Organizer** a tool for music producers, sound engineers or just fans of music with large unmanageable collections, to help manage their music or sample libraries. Whether you’re looking to clean up your folders, get detailed file info, detect duplicates, or auto-tag audio samples, this application can provide.
 
 ## What It Does
 
