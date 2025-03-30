@@ -46,17 +46,18 @@ Follow these steps to get Musicians Organizer up and running on your machine!
    git clone https://github.com/mmaitland300/organizer_project.git
    cd organizer_project
 
-**On Windows:**
+### On Windows:
     python -m venv venv
     .\venv\Scripts\Activate.ps1
     pip install -r requirements.txt
 
-**On macOS/Linux:**
+### On macOS/Linux:
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
 
-### Running the Application
+2. **Running the Application**
+   ```bash
     python -m organizer.organizer
 
 
