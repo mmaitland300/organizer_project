@@ -62,17 +62,37 @@ Follow these steps to get Musicians Organizer up and running on your machine!
     pip install -r requirements.txt
 
 
-### Running the application
+## Running the application
 
     python -m organizer.organizer
 
-### Packaging the application
+## Packaging the application
 
     pip install pyinstaller
     pyinstaller --noconfirm --onefile --windowed organizer/organizer.py
  
 
+## Running Tests
 
+To ensure everything is working correctly, you can run the tests provided in the repository.
+
+**Activate the virtual environment:**
+
+#### On Windows:
+    
+    .\venv\Scripts\Activate.ps1
+  
+
+#### On macOS/Linux:
+  
+    source venv/bin/activate
+   
+
+**Run the tests using pytest:**
+
+  
+    pytest
+   
 
 
 
