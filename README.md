@@ -1,13 +1,13 @@
 # Musicians Organizer
 
-Here is **Musicians Organizer** – an all-in-one tool for music producers, sound engineers or just fans of music with large unamanegeable collections, to help manage their music or sample libraries. Whether you’re looking to clean up your folders, get detailed file info, detect duplicates, or auto-tag audio samples, this application can provide.
+Here is **Musicians Organizer** – an all-in-one tool for music producers, sound engineers or just fans of music with large unmanageable collections, to help manage their music or sample libraries. Whether you’re looking to clean up your folders, get detailed file info, detect duplicates, or auto-tag audio samples, this application can provide.
 
 ## What It Does
 
 - **Scan Your Folders:**  
   Recursively scans directories to gather file details like size, modification date, and audio metadata (duration, sample rate, channels).
 
-  **Filtering & Searching:** 
+- **Filtering & Searching:**
   Use filters to quickly find samples by name or see only unused samples.
 
 - **Duplicate Detection:**  
@@ -38,29 +38,61 @@ Follow these steps to get Musicians Organizer up and running on your machine!
 - **Python 3.7+** (Recommend Python 3.11 to work with the librosa library)
 - [pip](https://pip.pypa.io/en/stable/) installed
 
-### Installation
+## Installation
 
-1. **Clone the Repository:**
+ #### Clone the Repository:
 
-   ```bash
-   git clone https://github.com/mmaitland300/organizer_project.git
-   cd organizer_project
-   
-2. **Install Virtual Environment and requirements:**
+    git clone https://github.com/mmaitland300/organizer_project.git
+    cd organizer_project
+  
+
+### Install Virtual Environment and requirements
 
 #### On Windows:
+ 
     python -m venv venv
     .\venv\Scripts\Activate.ps1
     pip install -r requirements.txt
 
+
 #### On macOS/Linux:
+
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
 
-### Running the application
+
+## Running the application
+
     python -m organizer.organizer
 
+## Packaging the application
+
+    pip install pyinstaller
+    pyinstaller --noconfirm --onefile --windowed organizer/organizer.py
+ 
+
+## Running Tests
+
+To ensure everything is working correctly, you can run the tests provided in the repository.
+
+**Activate the virtual environment:**
+
+#### On Windows:
+    
+    .\venv\Scripts\Activate.ps1
+  
+
+#### On macOS/Linux:
+  
+    source venv/bin/activate
+   
+
+**Run the tests using pytest:**
+
+  
+    pytest
+   
 
 
 
