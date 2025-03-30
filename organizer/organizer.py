@@ -238,8 +238,8 @@ class FileTableModel(QtCore.QAbstractTableModel):
     Columns: File Path, Size, Modified Date, Duration, BPM, Key, Used, Tags, Sample Rate, Channels.
     """
     COLUMN_HEADERS = [
-        "File Path",      # col 0: Folder path only
-        "File Name",      # col 1: Just the basename
+        "File Path",      # col 0: Path only
+        "File Name",      # col 1: Basename
         "Size",           # col 2
         "Modified Date",  # col 3
         "Duration",       # col 4
@@ -279,10 +279,8 @@ class FileTableModel(QtCore.QAbstractTableModel):
 
         if role == QtCore.Qt.DisplayRole:
             if col == 0:
-                # Return folder path only (exclude the file name)
                 return os.path.dirname(file_info['path'])
             elif col == 1:
-                # Return the file name only
                 return os.path.basename(file_info['path'])
             elif col == 2:
                 return self.format_size(file_info['size'])
@@ -295,7 +293,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
             elif col == 6:
                 return file_info.get('key', "")
             elif col == 7:
-                # "Used" is handled by CheckStateRole, so display empty text here.
+                # 'Used' column handled by CheckStateRole, so empty text.
                 return ""
             elif col == 8:
                 return str(file_info.get('samplerate', ""))
@@ -304,7 +302,6 @@ class FileTableModel(QtCore.QAbstractTableModel):
             elif col == 10:
                 return file_info.get('tags', "")
 
-        # Ensure the "Used" checkbox is displayed correctly in col 7.
         if role == QtCore.Qt.CheckStateRole and col == 7:
             return QtCore.Qt.Checked if file_info.get('used', False) else QtCore.Qt.Unchecked
 
@@ -324,14 +321,13 @@ class FileTableModel(QtCore.QAbstractTableModel):
         base_flags = QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled
         col = index.column()
 
-        # "Used" column remains at index 7.
         if col == 7:
             return base_flags | QtCore.Qt.ItemIsUserCheckable | QtCore.Qt.ItemIsEditable
-        # Allow editing for Duration (col 4), BPM (col 5), Key (col 6), and Tags (col 10)
         elif col in [4, 5, 6, 10]:
             return base_flags | QtCore.Qt.ItemIsEditable
         else:
             return base_flags
+
 
 
 
@@ -348,7 +344,6 @@ class FileTableModel(QtCore.QAbstractTableModel):
         file_info = self._files[index.row()]
         col = index.column()
 
-        # Handle check state for "Used" in column 7.
         if role == QtCore.Qt.CheckStateRole and col == 7:
             file_info['used'] = (value == QtCore.Qt.Checked)
             self.dataChanged.emit(index, index, [role])
@@ -433,7 +428,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         """
         super().__init__(parent)
         self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
-        self.setFilterKeyColumn(0)
+        self.setFilterKeyColumn(1)
         self.onlyUnused = False
 
     def setOnlyUnused(self, flag: bool) -> None:

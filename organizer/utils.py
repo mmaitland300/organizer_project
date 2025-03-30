@@ -173,10 +173,13 @@ def detect_key_from_filename(file_path: str) -> str:
         str: The detected key or an empty string if none found.
     """
     filename_no_ext = os.path.splitext(os.path.basename(file_path))[0]
+    # Return empty if filename contains consecutive dashes
+    if "--" in filename_no_ext:
+        return ""
     match = KEY_REGEX.search(filename_no_ext)
     if match:
-        root = match.group('root')       # e.g. 'c#' or 'c-sharp'
-        quality = match.group('quality') # e.g. 'min', 'm', 'maj'
+        root = match.group('root')
+        quality = match.group('quality')
         return unify_detected_key(root, quality)
     return ""
 

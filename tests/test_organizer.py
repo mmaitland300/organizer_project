@@ -1,6 +1,6 @@
 import pytest
 from typing import List, Dict, Any
-
+import os
 from PyQt5 import QtCore, QtWidgets
 from organizer.organizer import FileTableModel, FileFilterProxyModel, FileScanner
 
@@ -49,7 +49,7 @@ def test_file_table_model_column_count(table_model: FileTableModel) -> None:
     """
     Verify that the model returns 10 columns as defined in COLUMN_HEADERS.
     """
-    assert table_model.columnCount() == 10
+    assert table_model.columnCount() == 11
 
 
 def test_file_table_model_data_display(table_model: FileTableModel) -> None:
@@ -58,14 +58,14 @@ def test_file_table_model_data_display(table_model: FileTableModel) -> None:
     """
     index = table_model.index(0, 0)
     value = table_model.data(index, role=QtCore.Qt.DisplayRole)
-    assert value == dummy_files[0]['path']
+    assert value == os.path.dirname(dummy_files[0]['path'])
 
 
 def test_file_table_model_edit_duration(table_model: FileTableModel) -> None:
     """
     Test that editing the Duration cell with a valid "mm:ss" string updates the data.
     """
-    index = table_model.index(0, 3)  # Duration column
+    index = table_model.index(0, 4)  # Duration column
     # Change duration from "60" to "2:30" (150 seconds)
     success = table_model.setData(index, "2:30", role=QtCore.Qt.EditRole)
     assert success is True, "Expected valid duration edit to succeed."
@@ -86,7 +86,7 @@ def test_file_table_model_edit_bpm(table_model: FileTableModel) -> None:
     """
     Test that editing the BPM column with a valid numeric string works.
     """
-    index = table_model.index(0, 4)
+    index = table_model.index(0, 5)
     success = table_model.setData(index, "130", role=QtCore.Qt.EditRole)
     assert success is True, "Expected valid BPM edit to succeed."
     file_info = table_model.getFileAt(0)
@@ -97,7 +97,7 @@ def test_file_table_model_edit_invalid_bpm(table_model: FileTableModel) -> None:
     """
     Test that non-numeric input for BPM is rejected.
     """
-    index = table_model.index(0, 4)
+    index = table_model.index(0, 5)
     success = table_model.setData(index, "abc", role=QtCore.Qt.EditRole)
     assert success is False, "Expected invalid BPM edit to be rejected."
 
@@ -106,7 +106,7 @@ def test_file_table_model_edit_key(table_model: FileTableModel) -> None:
     """
     Test that editing the Key column converts the input to uppercase.
     """
-    index = table_model.index(0, 5)
+    index = table_model.index(0, 6)
     success = table_model.setData(index, "g#m", role=QtCore.Qt.EditRole)
     assert success is True, "Expected valid key edit to succeed."
     file_info = table_model.getFileAt(0)
@@ -117,7 +117,7 @@ def test_file_table_model_edit_tags(table_model: FileTableModel) -> None:
     """
     Test that editing the Tags column updates the tags.
     """
-    index = table_model.index(0, 7)
+    index = table_model.index(0, 10)
     new_tags = "Rock, Pop"
     success = table_model.setData(index, new_tags, role=QtCore.Qt.EditRole)
     assert success is True, "Expected tags edit to succeed."
