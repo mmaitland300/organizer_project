@@ -1426,13 +1426,23 @@ class MainWindow(QtWidgets.QMainWindow):
     # -------------------------- Duplicate Detection Methods --------------------------
     def findDuplicates(self) -> None:
         """
-        Initiate the process to find duplicate files.
+        Initiate the process to find duplicate files with a progress dialog for user feedback.
         """
         if not self.all_files_info:
             QtWidgets.QMessageBox.information(self, "No Files", "Please scan a folder first.")
             return
-        # Reference the nested DuplicateFinder class.
+        
+        # Create and show an indeterminate progress dialog
+        self.dupProgressDialog = QtWidgets.QProgressDialog("Searching for duplicates...", "Cancel", 0, 0, self)
+        self.dupProgressDialog.setWindowModality(QtCore.Qt.WindowModal)
+        self.dupProgressDialog.setMinimumDuration(0)
+        self.dupProgressDialog.setCancelButton(None)  # Optionally remove cancel button if not supported
+        self.dupProgressDialog.show()
+
+        # Start the duplicate finder thread.
         self.duplicateFinder = MainWindow.DuplicateFinder(self.all_files_info)
+        # Close the progress dialog when duplicate finding is complete.
+        self.duplicateFinder.finished.connect(lambda groups: self.dupProgressDialog.close())
         self.duplicateFinder.finished.connect(self.onDuplicatesFound)
         self.duplicateFinder.start()
 
