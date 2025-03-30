@@ -28,9 +28,6 @@ Here is **Musicians Organizer** – an all-in-one tool for music producers, soun
 - **Persistent Settings:**  
   Preferences (like window size, last scanned folder, theme, etc.) are saved automatically.
 
- **Theme Switching:** 
- Enjoy a standard light mode by default, with an option to switch to dark mode via the Theme menu.
-
 ## Getting Started
 Follow these steps to get Musicians Organizer up and running on your machine!
 ### Prerequisites
