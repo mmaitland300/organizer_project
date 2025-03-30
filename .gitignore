@@ -1,0 +1,62 @@
+
+#  Python Bytecode & Compiled Files
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+#  Virtual Environments
+
+env/
+venv/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+#  PyInstaller Build Folders
+
+build/
+dist/
+*.spec
+
+#  Test & Coverage
+
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+#  Package Distribution & Eggs
+
+*.egg-info/
+.eggs/
+*.egg
+develop-eggs/
+sdist/
+wheels/
+
+#  Installer Logs
+
+pip-log.txt
+pip-delete-this-directory.txt
+
+#  OS-Specific Files
+
+.DS_Store
+Thumbs.db
+
+#  Build Artifacts
+
+*.exe
+*.dll
+*.so
+*.dylib
+*.pyd
