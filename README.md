@@ -7,7 +7,7 @@ Here is **Musicians Organizer** – an all-in-one tool for music producers, soun
 - **Scan Your Folders:**  
   Recursively scans directories to gather file details like size, modification date, and audio metadata (duration, sample rate, channels).
 
-  **Filtering & Searching:** 
+- **Filtering & Searching:**
   Use filters to quickly find samples by name or see only unused samples.
 
 - **Duplicate Detection:**  
@@ -47,31 +47,31 @@ Follow these steps to get Musicians Organizer up and running on your machine!
     cd organizer_project
     ```
 
-2. **Install Virtual Environment and requirements:**
+### Install Virtual Environment and requirements
 
 #### On Windows:
-    ```bash
+ 
     python -m venv venv
     .\venv\Scripts\Activate.ps1
     pip install -r requirements.txt
-    ```
+
 
 #### On macOS/Linux:
-    ```bash
+
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
-    ```
+
 
 ### Running the application
-    ```bash
+
     python -m organizer.organizer
-    ```
+
 ### Packaging the application
-    ```bash
+
     pip install pyinstaller
     pyinstaller --noconfirm --onefile --windowed organizer/organizer.py
-    ```
+ 
 
 
 
