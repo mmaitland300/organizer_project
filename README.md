@@ -42,24 +42,37 @@ Follow these steps to get Musicians Organizer up and running on your machine!
 
 1. **Clone the Repository:**
 
-   ```bash
-   git clone https://github.com/mmaitland300/organizer_project.git
-   cd organizer_project
-   
+    ```bash
+    git clone https://github.com/mmaitland300/organizer_project.git
+    cd organizer_project
+    ```
+
 2. **Install Virtual Environment and requirements:**
 
 #### On Windows:
+    ```bash
     python -m venv venv
     .\venv\Scripts\Activate.ps1
     pip install -r requirements.txt
+    ```
 
 #### On macOS/Linux:
+    ```bash
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
+    ```
 
 ### Running the application
+    ```bash
     python -m organizer.organizer
+    ```
+### Packaging the application
+    ```bash
+    pip install pyinstaller
+    pyinstaller --noconfirm --onefile --windowed organizer/organizer.py
+    ```
+
 
 
 
