@@ -15,7 +15,7 @@ Features:
   - Persistence of user settings (window size and shape, last folder, preferences)
   - Audio metadata extraction (duration, sample rate, channels) for music sample management
   - "Mark as Used" column and audio preview functionality to help organize samples
-  - "Show Only Unused Samples" filter for music producers
+  - "Show Only Unused Samples" to be used with "Mark as Used"
   • Advanced audio analysis (BPM detection)
   • Advanced multi-dimensional tagging (editable Tags column + auto-tagging)
   • Sample recommendations based on similar BPM or tags
