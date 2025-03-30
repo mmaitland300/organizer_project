@@ -119,8 +119,10 @@ class FileScanner(QtCore.QThread):
             root_path (str): The directory to scan.
             bpm_detection (bool): Whether to perform BPM detection.
             parent (Optional[QtCore.QObject]): Parent object.
+        
+        Example:
+            scanner = FileScanner("/path/to/music", bpm_detection=True)
         """
-
         super().__init__(parent)
         self.root_path = root_path
         self.bpm_detection = bpm_detection
@@ -182,7 +184,7 @@ class FileScanner(QtCore.QThread):
                             # BPM detection only for audio files
                             if ENABLE_ADVANCED_AUDIO_ANALYSIS and self.bpm_detection:
                                 try:
-                                    # Optionally limit the duration to a fixed length (e.g., 60 seconds) to prevent huge arrays
+                                    # Limit the duration to a fixed length (e.g., 60 seconds) to prevent huge arrays
                                     y, sr = librosa.load(full_path,
                                                         sr=None,
                                                         offset=0.0,
@@ -734,9 +736,18 @@ class RecommendationsDialog(QtWidgets.QDialog):
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
-# ------------ Hash Worker ------------
+# -------------------------- Hash Worker --------------------------
 class HashWorker(QRunnable):
     def __init__(self, file_info):
+        """
+        Initialize the HashWorker.
+        
+        Args:
+            file_info (dict): The file information dictionary.
+        
+        Example:
+            worker = HashWorker(file_info)
+        """
         super().__init__()
         self.file_info = file_info
 
