@@ -47,14 +47,14 @@ Follow these steps to get Musicians Organizer up and running on your machine!
 
 #### On Windows:
  
-    python -m venv venv
+    python3.11 -m venv venv
     .\venv\Scripts\Activate.ps1
     pip install -r requirements.txt
 
 
 #### On macOS/Linux:
 
-    python3 -m venv venv
+    python3.11 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
 
