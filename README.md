@@ -52,13 +52,20 @@ Follow these steps to get Musicians Organizer up and running on your machine!
     pip install -r requirements.txt
 
 
-#### On macOS/Linux:
+#### On Linux(Debian/Unbuntu) (Had to install some aditional libararies):
 
     python3.11 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
     sudo apt update
     sudo apt install libpulse-mainloop-glib0 libpulse-dev
+    sudo apt install libqt5multimedia5-plugins \
+                 gstreamer1.0-plugins-base \
+                 gstreamer1.0-plugins-good \
+                 gstreamer1.0-plugins-bad \
+                 gstreamer1.0-plugins-ugly \
+                 gstreamer1.0-libav \
+                 ffmpeg
 
 ## Running the application
 
