@@ -87,9 +87,8 @@ To ensure everything is working correctly, you can run the tests provided in the
    
 
 **Run the tests using pytest:**
-
   
-    pytest
+    python -m pytest
    
 
 
