@@ -19,8 +19,8 @@ Here is **Musicians Organizer** a tool for music producers, sound engineers or j
 - **Auto-Tagging & Recommendations:**  
   Automatically tags files based on BPM and musical key detection, plus recommends similar samples based on your selections.
 
-- **Cubase Integration:**  
-  Easily send your favorite samples directly to your Cubase folder for a smooth production workflow.
+- **DAW Integration:**  
+  Easily send your favorite samples directly to your DAW of choices library for a smooth production workflow.
 
 - **Customizable Themes:**  
   Modern light theme by default, with the option to switch to dark mode if you prefer a different look.
