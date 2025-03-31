@@ -57,7 +57,8 @@ Follow these steps to get Musicians Organizer up and running on your machine!
     python3.11 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
-
+    sudo apt update
+    sudo apt install libpulse-mainloop-glib0 libpulse-dev
 
 ## Running the application
 
