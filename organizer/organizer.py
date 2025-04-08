@@ -706,6 +706,128 @@ class WaveformDialog(QtWidgets.QDialog):
         except Exception as e:
             QtWidgets.QMessageBox.critical(self, "Error", f"Could not load waveform: {e}")
 
+# -------------------------- Waveform Player --------------------------
+class WaveformPlayerWidget(QtWidgets.QWidget):
+    def __init__(self, file_path: str, parent=None):
+        super().__init__(parent)
+        self.file_path = file_path
+        self.setup_ui()
+        self.load_audio_and_plot()
+        self.init_player()
+
+    def setup_ui(self):
+        # Create layout
+        layout = QtWidgets.QVBoxLayout(self)
+        
+        # Create matplotlib Figure and Canvas for waveform display
+        self.figure, self.ax = plt.subplots(figsize=(6, 3))
+        self.canvas = FigureCanvas(self.figure)
+        layout.addWidget(self.canvas)
+        
+        # Create slider for playback progress
+        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        layout.addWidget(self.slider)
+        
+        # Create playback controls (Play/Pause button)
+        self.playButton = QtWidgets.QPushButton("Play")
+        self.playButton.clicked.connect(self.toggle_playback)
+        layout.addWidget(self.playButton)
+
+        # Timer to update playback cursor on the waveform
+        self.update_timer = QtCore.QTimer(self)
+        self.update_timer.setInterval(100)  # update every 100 ms
+        self.update_timer.timeout.connect(self.update_cursor)
+
+        # Allow clicking on the canvas to seek
+        self.canvas.mpl_connect("button_press_event", self.on_canvas_click)
+
+        # Internal variable for holding the current cursor line
+        self.cursor_line = None
+
+    def load_audio_and_plot(self):
+        # Use librosa to load the audio file (downsample for plotting if needed)
+        # Here we load the full file; you may use a trimmed duration for performance
+        try:
+            y, sr = librosa.load(self.file_path, sr=None, mono=True)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Error", f"Could not load audio:\n{e}")
+            return
+
+        # Downsample for plotting: e.g. take 1000 samples to plot a summary waveform
+        desired_points = 1000
+        factor = max(1, int(len(y) / desired_points))
+        y_downsampled = y[::factor]
+        times = np.linspace(0, len(y) / sr, num=len(y_downsampled))
+
+        # Plot the waveform
+        self.ax.clear()
+        self.ax.plot(times, y_downsampled, color="gray")
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Amplitude")
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+        # Save duration for use by the slider and player
+        self.duration_ms = int(len(y)/sr * 1000)
+        
+    def init_player(self):
+        # Set up QMediaPlayer for audio playback
+        self.player = QMediaPlayer(self)
+        url = QtCore.QUrl.fromLocalFile(os.path.abspath(self.file_path))
+        content = QMediaContent(url)
+        self.player.setMedia(content)
+        self.player.durationChanged.connect(self.on_duration_changed)
+        self.player.positionChanged.connect(self.on_position_changed)
+        
+        # Configure slider limits and actions
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(self.duration_ms)
+        self.slider.sliderMoved.connect(self.on_slider_moved)
+
+    def toggle_playback(self):
+        if self.player.state() == QMediaPlayer.PlayingState:
+            self.player.pause()
+            self.playButton.setText("Play")
+            self.update_timer.stop()
+        else:
+            self.player.play()
+            self.playButton.setText("Pause")
+            self.update_timer.start()
+
+    def on_duration_changed(self, duration):
+        # Update slider maximum (in case file length changed)
+        self.slider.setMaximum(duration)
+
+    def on_position_changed(self, position):
+        # Update slider to reflect current playback position
+        self.slider.setValue(position)
+
+    def on_slider_moved(self, pos):
+        # When the slider moves, seek the player to the appropriate position
+        self.player.setPosition(pos)
+
+    def update_cursor(self):
+        # Get the current playback position in seconds
+        pos_sec = self.player.position() / 1000.0
+
+        # Remove previous cursor line, if any
+        if self.cursor_line is not None:
+            self.cursor_line.remove()
+
+        # Draw a vertical line at the current playback time
+        self.cursor_line = self.ax.axvline(pos_sec, color="red")
+        self.canvas.draw_idle()
+
+    def on_canvas_click(self, event):
+        # Allow the user to click on the waveform to seek
+        if event.xdata is not None and event.button == 1:
+            new_pos_sec = event.xdata
+            new_pos_ms = int(new_pos_sec * 1000)
+            self.player.setPosition(new_pos_ms)
+            self.slider.setValue(new_pos_ms)
+            self.update_cursor()
+
 # -------------------------- Recommendations Dialog --------------------------
 class RecommendationsDialog(QtWidgets.QDialog):
     """
@@ -884,6 +1006,13 @@ class MainWindow(QtWidgets.QMainWindow):
         actWaveform.setToolTip("View the waveform of the selected audio file.")
         actWaveform.triggered.connect(self.waveformPreview)
         self.audioToolBar.addAction(actWaveform)
+
+        # Action: Waveform Player
+        actIntegratedWaveform = QtWidgets.QAction("Waveform Player", self)
+        actIntegratedWaveform.setToolTip("View waveform and playback sample")
+        actIntegratedWaveform.triggered.connect(self.launchWaveformPlayer)
+        self.audioToolBar.addAction(actIntegratedWaveform)
+
 
         # Small spacer for aesthetics
         spacer2 = QtWidgets.QWidget(self)
@@ -1562,6 +1691,37 @@ class MainWindow(QtWidgets.QMainWindow):
             dialog.exec_()
         else:
             QtWidgets.QMessageBox.information(self, "Feature Unavailable", "Waveform preview is not available (missing dependencies).")
+
+    # Waveform Player for selected file.
+    def launchWaveformPlayer(self) -> None:
+        selection = self.tableView.selectionModel().selectedRows()
+        if not selection:
+            QtWidgets.QMessageBox.information(self, "No Selection", "Please select an audio file.")
+            return
+        index = selection[0]
+        source_index = self.proxyModel.mapToSource(index)
+        file_info = self.model.getFileAt(source_index.row())
+        file_path = file_info.get('path')
+        if not file_path or not os.path.splitext(file_path)[1].lower() in AUDIO_EXTENSIONS:
+            QtWidgets.QMessageBox.information(self, "Not Audio", "Selected file is not recognized as an audio file.")
+            return
+        
+        # Option 1: Launch in a dialog
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Waveform Player")
+        dialog.resize(800, 600)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        
+        waveform_player = WaveformPlayerWidget(file_path, parent=dialog)
+        layout.addWidget(waveform_player)
+        
+        dialog.exec_()
+        
+        # Option 2: Embed in a dock widget (commented out for now)
+        # dock = QtWidgets.QDockWidget("Waveform Player", self)
+        # dock.setWidget(WaveformPlayerWidget(file_path, parent=self))
+        # self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, dock)
+
 
     # Direct Cubase Integration - Send to Cubase.
     def sendToCubase(self) -> None:
