@@ -19,8 +19,8 @@ Here is **Musicians Organizer** a tool for music producers, sound engineers or j
 - **Auto-Tagging & Recommendations:**  
   Automatically tags files based on BPM and musical key detection, plus recommends similar samples based on your selections.
 
-- **Cubase Integration:**  
-  Easily send your favorite samples directly to your Cubase folder for a smooth production workflow.
+- **DAW Integration:**  
+  Easily send your favorite samples directly to your DAW of choices library for a smooth production workflow.
 
 - **Customizable Themes:**  
   Modern light theme by default, with the option to switch to dark mode if you prefer a different look.
@@ -47,17 +47,25 @@ Follow these steps to get Musicians Organizer up and running on your machine!
 
 #### On Windows:
  
-    python -m venv venv
+    python3.11 -m venv venv
     .\venv\Scripts\Activate.ps1
     pip install -r requirements.txt
 
 
-#### On macOS/Linux:
+#### On Linux(Debian/Unbuntu) (Had to install some aditional libararies):
 
-    python3 -m venv venv
+    python3.11 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
-
+    sudo apt update
+    sudo apt install libpulse-mainloop-glib0 libpulse-dev
+    sudo apt install libqt5multimedia5-plugins \
+                 gstreamer1.0-plugins-base \
+                 gstreamer1.0-plugins-good \
+                 gstreamer1.0-plugins-bad \
+                 gstreamer1.0-plugins-ugly \
+                 gstreamer1.0-libav \
+                 ffmpeg
 
 ## Running the application
 
@@ -86,9 +94,8 @@ To ensure everything is working correctly, you can run the tests provided in the
    
 
 **Run the tests using pytest:**
-
   
-    pytest
+    python -m pytest
    
 
 
