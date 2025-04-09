@@ -151,6 +151,7 @@ class FileScanner(QtCore.QThread):
                     mod_time = datetime.datetime.fromtimestamp(mod_time_ts)
                     
                     # Initialize file information dictionary
+                    initial_tag_str = os.path.splitext(f)[1][1:].upper() if os.path.splitext(f)[1] else ""
                     file_info = {
                         'path': full_path,
                         'size': size,
@@ -159,7 +160,7 @@ class FileScanner(QtCore.QThread):
                         'bpm': None,
                         'key': "N/A",
                         'used': False,
-                        'tags': os.path.splitext(f)[1][1:].upper() if os.path.splitext(f)[1] else ""
+                        'tags': [initial_tag_str] if initial_tag_str else []
                     }
 
                     # Attempt to retrieve cached metadata
@@ -301,8 +302,9 @@ class FileTableModel(QtCore.QAbstractTableModel):
                 return str(file_info.get('samplerate', ""))
             elif col == 9:
                 return str(file_info.get('channels', ""))
-            elif col == 10:
-                return file_info.get('tags', "")
+            if col == 10 and role == QtCore.Qt.DisplayRole:
+                tags_list = file_info.get('tags', [])
+                return ", ".join(tags_list)
 
         if role == QtCore.Qt.CheckStateRole and col == 7:
             return QtCore.Qt.Checked if file_info.get('used', False) else QtCore.Qt.Unchecked
@@ -365,8 +367,29 @@ class FileTableModel(QtCore.QAbstractTableModel):
                     return False
             elif col == 6:  # Key
                 file_info['key'] = value.strip().upper() if value else ""
-            elif col == 10:  # Tags
-                file_info['tags'] = value
+            if col == 10 and role == QtCore.Qt.EditRole:
+                raw_tags = value.strip()
+                if raw_tags:
+                    # Support comma and semicolon as delimiters
+                    delimiters = [",", ";"]
+                    for delimiter in delimiters:
+                        if delimiter in raw_tags:
+                            tokens = [token.strip().upper() for token in raw_tags.split(delimiter)]
+                            break
+                    else:
+                        tokens = [raw_tags.upper()]
+                    # Remove duplicates
+                    seen = set()
+                    parsed_tags = []
+                    for token in tokens:
+                        if token and token not in seen:
+                            seen.add(token)
+                            parsed_tags.append(token)
+                    file_info['tags'] = parsed_tags
+                else:
+                    file_info['tags'] = []
+                self.dataChanged.emit(index, index, [role])
+                return True
             else:
                 return False
 
@@ -971,6 +994,45 @@ class RecommendationsDialog(QtWidgets.QDialog):
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
 
+# -------------------------Tag Editor Dialog--------------------------        
+class TagEditorDialog(QtWidgets.QDialog):
+    def __init__(self, tags_list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Tags")
+        layout = QtWidgets.QVBoxLayout(self)
+
+        self.listWidget = QtWidgets.QListWidget()
+        for tag in tags_list:
+            item = QtWidgets.QListWidgetItem(tag)
+            self.listWidget.addItem(item)
+        layout.addWidget(self.listWidget)
+
+        self.addLine = QtWidgets.QLineEdit()
+        self.addLine.setPlaceholderText("Add new tag...")
+        layout.addWidget(self.addLine)
+
+        btn_add = QtWidgets.QPushButton("Add Tag")
+        btn_add.clicked.connect(self.addTag)
+        layout.addWidget(btn_add)
+
+        # OK / Cancel
+        btnBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btnBox.accepted.connect(self.accept)
+        btnBox.rejected.connect(self.reject)
+        layout.addWidget(btnBox)
+
+    def addTag(self):
+        new_tag = self.addLine.text().strip().upper()
+        if new_tag:
+            self.listWidget.addItem(new_tag)
+            self.addLine.clear()
+
+    def get_tags(self):
+        tags = []
+        for i in range(self.listWidget.count()):
+            tags.append(self.listWidget.item(i).text())
+        return list(set(tags))  # remove duplicates
+
 # -------------------------- Hash Worker --------------------------
 class HashWorker(QRunnable):
     def __init__(self, file_info):
@@ -1138,6 +1200,12 @@ class MainWindow(QtWidgets.QMainWindow):
         actAutoTag.triggered.connect(self.autoTagFiles)
         self.audioToolBar.addAction(actAutoTag)
 
+        # Action: Edit Tags
+        actEditTags = QtWidgets.QAction("Edit Tags", self)
+        actEditTags.setToolTip("Open the Tag Editor dialog for the selected file.")
+        actEditTags.triggered.connect(self.editTagsForSelectedFile)
+        self.audioToolBar.addAction(actEditTags)
+
         # Action: Recommend Samples
         actRecommend = QtWidgets.QAction("Recommend", self)
         actRecommend.setToolTip("Recommend similar samples based on BPM or tags.")
@@ -1237,6 +1305,24 @@ class MainWindow(QtWidgets.QMainWindow):
         actDark.triggered.connect(lambda: self.setTheme("dark", save=True))
         themeMenu.addAction(actDark)
 
+    def editTagsForSelectedFile(self) -> None:
+        selected_indexes = self.tableView.selectionModel().selectedRows()
+        if not selected_indexes:
+            QtWidgets.QMessageBox.information(self, "No Selection", "Please select a file to edit tags.")
+            return
+
+        # Assume single selection or handle multiple if needed
+        source_index = self.proxyModel.mapToSource(selected_indexes[0])
+        file_info = self.model.getFileAt(source_index.row())
+        current_tags = file_info.get("tags", [])
+
+        # Open Tag Editor Dialog with current tags
+        dialog = TagEditorDialog(current_tags, parent=self)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            updated_tags = dialog.get_tags()  # returns a list of tags
+            file_info["tags"] = updated_tags
+            # Optionally, update the model data to refresh the view
+            self.model.dataChanged.emit(source_index, source_index, [QtCore.Qt.DisplayRole])
 
 
     def applyLightThemeStylesheet(self) -> None:
@@ -1938,20 +2024,41 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Automatically tag files based on BPM and detect musical key from filename.
         """
-        # BPM-based tagging
         for info in self.all_files_info:
+            # 1) Convert old-style string tags to a list if needed
+            current_tags = info.get('tags', [])
+            if isinstance(current_tags, str):
+                # parse the comma-separated string
+                current_tags = [t.strip().upper() for t in current_tags.split(",") if t.strip()]
+
+            # 2) BPM-based tagging
             bpm = info.get('bpm')
             if bpm:
                 if bpm > 120:
-                    tag = "FAST"
+                    new_tag = "FAST"
                 elif bpm < 90:
-                    tag = "SLOW"
+                    new_tag = "SLOW"
                 else:
-                    tag = "MEDIUM"
-                current_tags = info.get('tags', "")
-                tags_set = set(tag_str.strip().upper() for tag_str in current_tags.split(",") if tag_str.strip())
-                tags_set.add(tag.upper())
-                info['tags'] = ", ".join(sorted(tags_set))
+                    new_tag = "MEDIUM"
+
+                # Combine with the current list of tags
+                tags_set = set(current_tags)
+                tags_set.add(new_tag)
+                current_tags = list(tags_set)
+
+            # 3) Key detection if 'key' not set or "N/A"
+            if not info.get('key') or info['key'].upper() == "N/A":
+                detected_key = detect_key_from_filename(info['path'])
+                if detected_key:
+                    info['key'] = detected_key
+
+            # 4) Update info with the final tag list
+            info['tags'] = current_tags
+
+        # Refresh the table to reflect updated info
+        self.model.updateData(self.all_files_info)
+        QtWidgets.QMessageBox.information(self, "Auto Tagging", "Files have been auto-tagged (BPM + Key).")
+
 
         # Key detection via regex
         for info in self.all_files_info:
