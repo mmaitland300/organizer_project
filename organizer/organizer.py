@@ -1022,6 +1022,95 @@ class TagEditorDialog(QtWidgets.QDialog):
             tags.append(self.listWidget.item(i).text())
         return list(set(tags))  # remove duplicates
 
+class MultiDimTagEditorDialog(QtWidgets.QDialog):
+    def __init__(self, tag_data, parent=None):
+        """
+        tag_data should be a dictionary, e.g.:
+          {"genre": ["ROCK", "POP"], "mood": ["HAPPY"], "general": ["CLASSIC"]}
+        """
+        super().__init__(parent)
+        self.setWindowTitle("Edit Tags")
+        self.resize(400, 300)
+        # Ensure tag_data is a dictionary
+        if isinstance(tag_data, list):
+            self.tag_data = {"general": tag_data}
+        elif isinstance(tag_data, dict):
+            self.tag_data = tag_data.copy()
+        else:
+            self.tag_data = {}
+            
+        main_layout = QtWidgets.QVBoxLayout(self)
+
+        # Table with two columns: Dimension and Tag
+        self.tableWidget = QtWidgets.QTableWidget()
+        self.tableWidget.setColumnCount(2)
+        self.tableWidget.setHorizontalHeaderLabels(["Dimension", "Tag"])
+        self.tableWidget.horizontalHeader().setStretchLastSection(True)
+        main_layout.addWidget(self.tableWidget)
+        self.loadData()
+
+        # Row for entering new tag entry
+        row_layout = QtWidgets.QHBoxLayout()
+        self.dimensionEdit = QtWidgets.QLineEdit()
+        self.dimensionEdit.setPlaceholderText("Dimension (e.g., genre, mood)")
+        self.tagEdit = QtWidgets.QLineEdit()
+        self.tagEdit.setPlaceholderText("Tag (e.g., ROCK)")
+        row_layout.addWidget(self.dimensionEdit)
+        row_layout.addWidget(self.tagEdit)
+        main_layout.addLayout(row_layout)
+
+        btnAdd = QtWidgets.QPushButton("Add Tag")
+        btnAdd.clicked.connect(self.addTag)
+        main_layout.addWidget(btnAdd)
+
+        # OK and Cancel buttons
+        btnBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        btnBox.accepted.connect(self.accept)
+        btnBox.rejected.connect(self.reject)
+        main_layout.addWidget(btnBox)
+
+    def loadData(self):
+        """Populate the table with current tag data."""
+        self.tableWidget.setRowCount(0)
+        for dimension, tags in self.tag_data.items():
+            for tag in tags:
+                row = self.tableWidget.rowCount()
+                self.tableWidget.insertRow(row)
+                dim_item = QtWidgets.QTableWidgetItem(dimension.capitalize())
+                tag_item = QtWidgets.QTableWidgetItem(tag)
+                self.tableWidget.setItem(row, 0, dim_item)
+                self.tableWidget.setItem(row, 1, tag_item)
+
+    def addTag(self):
+        """Add a new tag row based on the entered dimension and tag."""
+        dimension = self.dimensionEdit.text().strip().lower()
+        tag = self.tagEdit.text().strip().upper()
+        if not dimension or not tag:
+            return
+        row = self.tableWidget.rowCount()
+        self.tableWidget.insertRow(row)
+        dim_item = QtWidgets.QTableWidgetItem(dimension.capitalize())
+        tag_item = QtWidgets.QTableWidgetItem(tag)
+        self.tableWidget.setItem(row, 0, dim_item)
+        self.tableWidget.setItem(row, 1, tag_item)
+        self.dimensionEdit.clear()
+        self.tagEdit.clear()
+
+    def get_tags(self) -> dict:
+        """Return the updated dictionary of tags."""
+        new_tags = {}
+        for row in range(self.tableWidget.rowCount()):
+            dim_item = self.tableWidget.item(row, 0)
+            tag_item = self.tableWidget.item(row, 1)
+            if dim_item and tag_item:
+                dimension = dim_item.text().lower()
+                tag = tag_item.text().upper()
+                new_tags.setdefault(dimension, [])
+                if tag not in new_tags[dimension]:
+                    new_tags[dimension].append(tag)
+        return new_tags
+
+
 # -------------------------- Hash Worker --------------------------
 class HashWorker(QRunnable):
     def __init__(self, file_info):
@@ -1191,7 +1280,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Action: Edit Tags
         actEditTags = QtWidgets.QAction("Edit Tags", self)
-        actEditTags.setToolTip("Open the Tag Editor dialog for the selected file.")
+        actEditTags.setToolTip("Edit tags using the multi-dimensional tag editor.")
         actEditTags.triggered.connect(self.editTagsForSelectedFile)
         self.audioToolBar.addAction(actEditTags)
 
@@ -1300,17 +1389,16 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "No Selection", "Please select a file to edit tags.")
             return
 
-        # Assume single selection or handle multiple if needed
         source_index = self.proxyModel.mapToSource(selected_indexes[0])
         file_info = self.model.getFileAt(source_index.row())
-        current_tags = file_info.get("tags", [])
-
-        # Open Tag Editor Dialog with current tags
-        dialog = TagEditorDialog(current_tags, parent=self)
+        current_tags = file_info.get("tags", {})
+        # Ensure legacy data is converted if needed
+        if isinstance(current_tags, list):
+            current_tags = {"general": current_tags}
+        dialog = MultiDimTagEditorDialog(current_tags, parent=self)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            updated_tags = dialog.get_tags()  # returns a list of tags
+            updated_tags = dialog.get_tags()  # dictionary format
             file_info["tags"] = updated_tags
-            # Optionally, update the model data to refresh the view
             self.model.dataChanged.emit(source_index, source_index, [QtCore.Qt.DisplayRole])
 
 
