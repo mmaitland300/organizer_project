@@ -709,13 +709,15 @@ class WaveformDialog(QtWidgets.QDialog):
 # -------------------------- Waveform Player --------------------------
 def format_time(seconds: float) -> str:
     """
-    Convert a float number of seconds to m:ss format.
+    Convert a float number of seconds to m:ss.xx format for more precise timing.
+    E.g., 0.8 -> 0:00.80, 75.345 -> 1:15.35, etc.
     """
     if seconds < 0:
         seconds = 0
     minutes = int(seconds // 60)
-    secs = int(seconds % 60)
-    return f"{minutes}:{secs:02d}"
+    secs = seconds % 60.0
+    # Return up to 2 decimal places of seconds
+    return f"{minutes}:{secs:05.2f}"
 
 class WaveformPlayerWidget(QtWidgets.QWidget):
     """
@@ -744,11 +746,10 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
         self.load_audio_and_plot()
         self.init_player()
         self.applyTheme(self.theme)  # Apply theme to the matplotlib figure
+        
 
     def setup_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
-
-
 
         # Top sub-layout for waveform
         self.figure, self.ax = plt.subplots(figsize=(6, 3))
@@ -816,7 +817,8 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
 
         # Compute durations
         self.duration_ms = int(len(y) / sr * 1000)
-        self.total_duration_secs = len(y) / sr
+        self.total_duration_secs = len(y)/sr
+        self.totalTimeLabel.setText(format_time(self.total_duration_secs))
         self.canvas.draw()
 
         # Update the total duration label
@@ -903,8 +905,9 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
         Keep the slider in sync with the player position.
         """
         self.slider.setValue(position)
-        # Update current time label
-        self.currentTimeLabel.setText(format_time(position / 1000.0))
+        # Convert milliseconds -> seconds as a float
+        current_sec = position / 1000.0
+        self.currentTimeLabel.setText(format_time(current_sec))
 
     def on_slider_moved(self, pos):
         """
