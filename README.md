@@ -79,8 +79,6 @@ Open your terminal and run:
     git clone https://github.com/mmaitland300/organizer_project.git
     cd organizer_project
 
-Since the current repository contains the old single‑file version, we recommend creating a backup branch for it before integrating the new version. (See instructions in the Git guide below.)
-
 #### Set Up the Virtual Environment and Install Dependencies
 
 ##### On Windows
