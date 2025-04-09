@@ -42,7 +42,10 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtCore import QUrl, QRunnable, QThreadPool, pyqtSlot
 from send2trash import send2trash
-
+from organizer.tag_utils import (
+    format_multi_dim_tags, 
+    parse_multi_dim_tags
+    )
 from organizer.utils import (
     bytes_to_unit,
     format_duration,
@@ -303,8 +306,11 @@ class FileTableModel(QtCore.QAbstractTableModel):
             elif col == 9:
                 return str(file_info.get('channels', ""))
             if col == 10 and role == QtCore.Qt.DisplayRole:
-                tags_list = file_info.get('tags', [])
-                return ", ".join(tags_list)
+                tags_data = file_info.get('tags', {})
+                # If legacy list is found, interpret it as "general" tags.
+                if isinstance(tags_data, list):
+                    tags_data = {"general": tags_data}
+                return format_multi_dim_tags(tags_data)
 
         if role == QtCore.Qt.CheckStateRole and col == 7:
             return QtCore.Qt.Checked if file_info.get('used', False) else QtCore.Qt.Unchecked
@@ -368,26 +374,9 @@ class FileTableModel(QtCore.QAbstractTableModel):
             elif col == 6:  # Key
                 file_info['key'] = value.strip().upper() if value else ""
             if col == 10 and role == QtCore.Qt.EditRole:
-                raw_tags = value.strip()
-                if raw_tags:
-                    # Support comma and semicolon as delimiters
-                    delimiters = [",", ";"]
-                    for delimiter in delimiters:
-                        if delimiter in raw_tags:
-                            tokens = [token.strip().upper() for token in raw_tags.split(delimiter)]
-                            break
-                    else:
-                        tokens = [raw_tags.upper()]
-                    # Remove duplicates
-                    seen = set()
-                    parsed_tags = []
-                    for token in tokens:
-                        if token and token not in seen:
-                            seen.add(token)
-                            parsed_tags.append(token)
-                    file_info['tags'] = parsed_tags
-                else:
-                    file_info['tags'] = []
+                # Parse the user input string into a dictionary.
+                tag_dict = parse_multi_dim_tags(value)
+                file_info['tags'] = tag_dict
                 self.dataChanged.emit(index, index, [role])
                 return True
             else:
