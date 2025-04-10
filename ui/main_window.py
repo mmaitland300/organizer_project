@@ -505,11 +505,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.player = QMediaPlayer()
 
     def initUI(self) -> None:
-        central_widget = QtWidgets.QWidget()
+        """
+        Initialize the main UI including toolbars and buttons.
+        """
+        central_widget = QtWidgets.QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QtWidgets.QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
+        # Create the File Management Toolbar
         self.fileToolBar = QtWidgets.QToolBar("File Management")
         self.fileToolBar.setObjectName("fileToolBar")
         self.fileToolBar.setMovable(False)
@@ -542,11 +546,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progressBar.setFixedWidth(200)
         progressAction = QtWidgets.QWidgetAction(self.fileToolBar)
         progressAction.setDefaultWidget(self.progressBar)
-        self.cancelButton = QtWidgets.QPushButton("Cancel")
+
+        # Create the Cancel Button
+        self.cancelButton = QtWidgets.QPushButton("Cancel", self)
         self.cancelButton.setToolTip("Cancel current operation")
-        self.cancelButton.setEnabled(False)
+        self.cancelButton.setFixedWidth(80)
         self.cancelButton.clicked.connect(self.cancelCurrentOperation)
-        self.fileToolBar.addWidget(self.cancelButton)
+        self.cancelButton.setVisible(False)
+
+        # Wrap it in a QWidgetAction
+        cancelAction = QtWidgets.QWidgetAction(self.fileToolBar)
+        cancelAction.setDefaultWidget(self.cancelButton)
+        self.fileToolBar.addAction(cancelAction)
+
         self.fileToolBar.addAction(progressAction)
         rightExpSpacer = QtWidgets.QWidget(self)
         rightExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
@@ -916,27 +928,46 @@ class MainWindow(QtWidgets.QMainWindow):
         event.accept()
 
     def selectFolder(self):
+        """
+        Triggered by the "Select Folder" action.
+        Opens a folder selection dialog, initializes the scanning operation,
+        and shows the cancel button before starting the scan.
+        """
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             self.last_folder = folder
-            self.scanner = FileScanner(folder, bpm_detection=self.chkBPM.isChecked())
-            # Connect progress updates to the progress bar.
+            self.scanner = FileScanner(folder, bpm_detection=True)  # assume bpm_detection flag as needed
             self.scanner.progress.connect(lambda cur, tot: self.progressBar.setValue(int(cur / tot * 100)))
-            # When scanning finishes, call onScanFinished.
             self.scanner.finished.connect(self.onScanFinished)
-            # Clean up the reference to avoid lingering finished thread objects.
             self.scanner.finished.connect(lambda: setattr(self, "scanner", None))
-            # Disable the cancel button when the scan operation finishes.
-            self.scanner.finished.connect(lambda: self.cancelButton.setEnabled(False))
-            # Enable the cancel button so the user can cancel the scanning.
+            
+            # Show and enable the cancel button before starting the scan.
+            self.cancelButton.setVisible(True)
+            print("Cancel visible?", self.cancelButton.isVisible())
+            print("Cancel geometry:", self.cancelButton.geometry())
             self.cancelButton.setEnabled(True)
-            self.scanner.start()
+            self.cancelButton.raise_()
+            
+            # Force the QToolBar layout to update its geometry.
+            self.fileToolBar.updateGeometry()  
+            self.fileToolBar.adjustSize()
+            self.fileToolBar.repaint()          
+            QtWidgets.QApplication.processEvents()
+            # Start the scanning thread.
+            # using QTimer.singleShot to allow the UI to render the layout change.
+            QtCore.QTimer.singleShot(50, self.scanner.start)
+
+
 
     def onScanFinished(self, files):
+        self.progressBar.setValue(100)
         self.all_files_info = files
         self.model.updateData(files)
         total_size = sum(file['size'] for file in files)
         self.labelSummary.setText(f"Scanned {len(files)} files. Total size: {bytes_to_unit(total_size, self.size_unit):.2f} {self.size_unit}.")
+        self.cancelButton.setVisible(False)
+        self.fileToolBar.updateGeometry()
+        self.fileToolBar.repaint()
 
     def findDuplicates(self):
         self.progressBar.setValue(0)
@@ -947,10 +978,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.duplicateFinder.finished.connect(self.onDuplicatesFound)
         # Clean up the reference to the duplicate finder thread when finished.
         self.duplicateFinder.finished.connect(lambda: setattr(self, "duplicateFinder", None))
-        # Disable the cancel button when duplicate detection finishes.
-        self.duplicateFinder.finished.connect(lambda: self.cancelButton.setEnabled(False))
-        # Enable the cancel button for the duplicate detection operation.
+        # Show Cancel when duplicate detection starts
+        self.cancelButton.show()
         self.cancelButton.setEnabled(True)
+        
         self.duplicateFinder.start()
 
     
@@ -971,6 +1002,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Called when the DuplicateFinder thread has finished. 
         Show the DuplicateManagerDialog if duplicates found, else show a message.
         """
+        self.progressBar.setValue(100)
         if duplicate_groups:
             dlg = DuplicateManagerDialog(
                 duplicate_groups, 
@@ -981,6 +1013,7 @@ class MainWindow(QtWidgets.QMainWindow):
             dlg.exec_()
         else:
             QtWidgets.QMessageBox.information(self, "Find Duplicates", "No duplicate files found.")
+        self.cancelButton.hide()
 
     def openSelectedFileLocation(self):
         path = self.getSelectedFilePath()
@@ -1049,7 +1082,33 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
 
     def stopPreview(self):
-        self.player.stop()
+        """
+        Modified stop button slot.
+        This function now first checks if a long-running operation (file scanning or duplicate detection)
+        is active. If so, it cancels the operation and informs the user. Otherwise, it stops audio playback.
+        """
+        operationCanceled = False
+
+        # Check if a file scanning operation is active.
+        if hasattr(self, 'scanner') and self.scanner is not None:
+            self.scanner.cancel()  # Cancel the scanning thread (the FileScanner instance must implement cancel())
+            operationCanceled = True
+            # Optionally, reset the progress bar if needed:
+            self.progressBar.setValue(0)
+        
+        # Similarly, check if duplicate detection is running.
+        if hasattr(self, 'duplicateFinder') and self.duplicateFinder is not None:
+            self.duplicateFinder.cancel()  # Cancel the duplicateFinder thread.
+            operationCanceled = True
+
+        if operationCanceled:
+            # Inform the user that the long-running operation has been cancelled.
+            QtWidgets.QMessageBox.information(self, "Operation Cancelled",
+                                            "The operation has been cancelled.")
+        else:
+            # Otherwise, if there is no such operation active, just stop audio playback.
+            self.player.stop()
+
 
     def waveformPreview(self):
         path = self.getSelectedFilePath()
@@ -1206,13 +1265,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.model.updateData(self.all_files_info)
 
     def cancelCurrentOperation(self):
-        # Cancel file scanning if active.
+        """
+        Slot connected to the Cancel button's clicked signal.
+        This function cancels any ongoing long-running operation,
+        such as a file scan or duplicate search.
+        """
+        # Check if the scanner is active and cancel it.
         if hasattr(self, 'scanner') and self.scanner is not None:
-            self.scanner.cancel()
-            QtWidgets.QMessageBox.information(self, "Operation Cancelled", "File scanning has been cancelled.")
-            self.cancelButton.setEnabled(False)
-        # Cancel duplicate detection if active.
+            self.scanner.cancel()  # The FileScanner thread must implement a cancel() method.
+        # If there are other operations (e.g., duplicate finding), check and cancel here too:
         elif hasattr(self, 'duplicateFinder') and self.duplicateFinder is not None:
             self.duplicateFinder.cancel()
-            QtWidgets.QMessageBox.information(self, "Operation Cancelled", "Duplicate detection has been cancelled.")
-            self.cancelButton.setEnabled(False)
+        
+        # Optionally, display feedback to the user that cancellation has been requested.
+        QtWidgets.QMessageBox.information(self, "Operation Cancelled", "The current operation has been cancelled.")
+        
+        # Disable and hide the cancel button.
+        self.cancelButton.setEnabled(False)
+        self.cancelButton.setVisible(False)
+        
+        # Force a final layout update to reflect the removal of the cancel button.
+        self.fileToolBar.updateGeometry()
+        self.fileToolBar.repaint()
+
+

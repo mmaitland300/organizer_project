@@ -122,6 +122,7 @@ class FileScanner(QtCore.QThread):
                 if current_count % 100 == 0:
                     self.progress.emit(current_count, total_files)
         cache_manager.save_cache()
+        self.progress.emit(total_files, total_files)
         self.finished.emit(files_info)
 
     def cancel(self):
