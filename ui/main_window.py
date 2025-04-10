@@ -542,6 +542,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progressBar.setFixedWidth(200)
         progressAction = QtWidgets.QWidgetAction(self.fileToolBar)
         progressAction.setDefaultWidget(self.progressBar)
+        self.cancelButton = QtWidgets.QPushButton("Cancel")
+        self.cancelButton.setToolTip("Cancel current operation")
+        self.cancelButton.setEnabled(False)
+        self.cancelButton.clicked.connect(self.cancelCurrentOperation)
+        self.fileToolBar.addWidget(self.cancelButton)
         self.fileToolBar.addAction(progressAction)
         rightExpSpacer = QtWidgets.QWidget(self)
         rightExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
@@ -910,17 +915,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.saveSettings()
         event.accept()
 
-    # Stub implementations for methods referenced in toolbar actions
     def selectFolder(self):
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             self.last_folder = folder
-            # Store the thread instance as an attribute to prevent premature garbage collection
             self.scanner = FileScanner(folder, bpm_detection=self.chkBPM.isChecked())
+            # Connect progress updates to the progress bar.
             self.scanner.progress.connect(lambda cur, tot: self.progressBar.setValue(int(cur / tot * 100)))
+            # When scanning finishes, call onScanFinished.
             self.scanner.finished.connect(self.onScanFinished)
-            # Optionally clear the reference when the thread finishes
+            # Clean up the reference to avoid lingering finished thread objects.
             self.scanner.finished.connect(lambda: setattr(self, "scanner", None))
+            # Disable the cancel button when the scan operation finishes.
+            self.scanner.finished.connect(lambda: self.cancelButton.setEnabled(False))
+            # Enable the cancel button so the user can cancel the scanning.
+            self.cancelButton.setEnabled(True)
             self.scanner.start()
 
     def onScanFinished(self, files):
@@ -930,28 +939,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.labelSummary.setText(f"Scanned {len(files)} files. Total size: {bytes_to_unit(total_size, self.size_unit):.2f} {self.size_unit}.")
 
     def findDuplicates(self):
-        """
-        Launch an asynchronous thread to find duplicate files, updating the
-        progress bar so the UI remains responsive.
-        """
-        # Reset or re-use progressBar
         self.progressBar.setValue(0)
-        
-        # Create the QThread worker for duplicates
         self.duplicateFinder = DuplicateFinder(self.all_files_info)
-        
-        # Connect progress signal to the progress bar
+        # Connect progress updates to update the progress bar.
         self.duplicateFinder.progress.connect(self.onDuplicateProgress)
-        # Connect finished signal to handle results
+        # When duplicate detection finishes, call onDuplicatesFound.
         self.duplicateFinder.finished.connect(self.onDuplicatesFound)
-        
-        # Optionally clear self.duplicateFinder when finished, to prevent GC issues
-        self.duplicateFinder.finished.connect(
-            lambda: setattr(self, "duplicateFinder", None)
-        )
-        
-        # Start the worker
+        # Clean up the reference to the duplicate finder thread when finished.
+        self.duplicateFinder.finished.connect(lambda: setattr(self, "duplicateFinder", None))
+        # Disable the cancel button when duplicate detection finishes.
+        self.duplicateFinder.finished.connect(lambda: self.cancelButton.setEnabled(False))
+        # Enable the cancel button for the duplicate detection operation.
+        self.cancelButton.setEnabled(True)
         self.duplicateFinder.start()
+
     
     @QtCore.pyqtSlot(int, int)
     def onDuplicateProgress(self, current, total):
@@ -1203,3 +1204,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.size_unit = self.comboSizeUnit.currentText()
         self.model.size_unit = self.size_unit
         self.model.updateData(self.all_files_info)
+
+    def cancelCurrentOperation(self):
+        # Cancel file scanning if active.
+        if hasattr(self, 'scanner') and self.scanner is not None:
+            self.scanner.cancel()
+            QtWidgets.QMessageBox.information(self, "Operation Cancelled", "File scanning has been cancelled.")
+            self.cancelButton.setEnabled(False)
+        # Cancel duplicate detection if active.
+        elif hasattr(self, 'duplicateFinder') and self.duplicateFinder is not None:
+            self.duplicateFinder.cancel()
+            QtWidgets.QMessageBox.information(self, "Operation Cancelled", "Duplicate detection has been cancelled.")
+            self.cancelButton.setEnabled(False)

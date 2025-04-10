@@ -7,10 +7,10 @@ import logging
 from PyQt5 import QtCore
 from PyQt5.QtCore import QRunnable, pyqtSlot
 from typing import Optional
-# Import helper functions and cache manager via absolute imports
+
 from utils.helpers import compute_hash, bytes_to_unit, format_duration, detect_key_from_filename
 from utils.cache_manager import CacheManager
-# Import configuration constants and dependencies from settings
+
 from config.settings import MAX_HASH_FILE_SIZE, HASH_TIMEOUT_SECONDS, AUDIO_EXTENSIONS, ENABLE_ADVANCED_AUDIO_ANALYSIS
 from config.settings import TinyTag, librosa, np
 
@@ -34,6 +34,7 @@ class FileScanner(QtCore.QThread):
         super().__init__(parent)
         self.root_path = root_path
         self.bpm_detection = bpm_detection
+        self._cancelled = False
 
     def run(self) -> None:
         total_files = 0
@@ -42,7 +43,14 @@ class FileScanner(QtCore.QThread):
         files_info = []
         current_count = 0
         for dirpath, _, filenames in os.walk(self.root_path):
+            # Before processing each directory, check for cancellation.
+            if self._cancelled:
+                self.finished.emit(files_info)  # Optionally return what was scanned so far.
+                return
             for f in filenames:
+                if self._cancelled:
+                    self.finished.emit(files_info)
+                    return
                 raw_path = os.path.join(dirpath, f)
                 full_path = os.path.normpath(os.path.abspath(raw_path))
                 try:
@@ -115,6 +123,10 @@ class FileScanner(QtCore.QThread):
                     self.progress.emit(current_count, total_files)
         cache_manager.save_cache()
         self.finished.emit(files_info)
+
+    def cancel(self):
+        """Allow cancellation of the scanning process."""
+        self._cancelled = True
 
 # -------------------------- Hash Worker --------------------------
 class HashWorker(QRunnable):

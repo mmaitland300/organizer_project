@@ -16,6 +16,7 @@ class DuplicateFinder(QtCore.QThread):
     def __init__(self, files_info: List[Dict[str, Any]], parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
         self.files_info = files_info
+        self._cancelled = False
 
     def run(self):
         """
@@ -28,25 +29,28 @@ class DuplicateFinder(QtCore.QThread):
             size = file_info['size']
             size_dict.setdefault(size, []).append(file_info)
 
-        # We will track progress across all files we process in hashing
+        # Track progress across all files we process in hashing
         # Count how many files we will potentially hash
         total_for_progress = len(self.files_info)
         current_count = 0
-        
         duplicate_groups = []
         
         # 2) For each group with more than 1 file, group by MD5
         for group in size_dict.values():
+            if self._cancelled:
+                self.finished.emit([]) 
+                return
             if len(group) > 1:
                 hash_dict = {}
                 for fi in group:
-                    # Potentially compute or retrieve hash
+                    if self._cancelled:
+                        self.finished.emit([])  # Early return if cancelled.
+                        return
                     if 'hash' not in fi or fi['hash'] is None:
                         fi['hash'] = compute_hash(fi['path'])
                     h = fi['hash']
                     if h:
                         hash_dict.setdefault(h, []).append(fi)
-                    # Update progress
                     current_count += 1
                     if current_count % 5 == 0:
                         self.progress.emit(current_count, total_for_progress)
@@ -57,6 +61,8 @@ class DuplicateFinder(QtCore.QThread):
                 # small optimization if group size=1 we do no hashing
                 current_count += len(group)
                 self.progress.emit(current_count, total_for_progress)
-                
-        # 3) Done
         self.finished.emit(duplicate_groups)
+
+    def cancel(self):
+        """Set cancellation flag for duplicate detection."""
+        self._cancelled = True
