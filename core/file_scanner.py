@@ -14,10 +14,9 @@ from utils.cache_manager import CacheManager
 from config.settings import MAX_HASH_FILE_SIZE, HASH_TIMEOUT_SECONDS, AUDIO_EXTENSIONS, ENABLE_ADVANCED_AUDIO_ANALYSIS
 from config.settings import TinyTag, librosa, np
 
-# Setup logger for this module
+
 logger = logging.getLogger(__name__)
 
-# Create a module-level cache_manager instance if needed
 cache_manager = CacheManager()
 
 # -------------------------- File Scanning --------------------------
