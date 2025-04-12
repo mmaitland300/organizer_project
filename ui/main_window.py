@@ -8,12 +8,11 @@ from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtCore import QUrl, pyqtSlot
 from send2trash import send2trash
 
-# Import models
 from models.file_model import FileTableModel, FileFilterProxyModel
-# Import file scanning and duplicate finder classes from core
+
 from core.file_scanner import FileScanner, HashWorker
 from core.duplicate_finder import DuplicateFinder
-# Import utility functions and cache manager
+
 from utils.helpers import (
     parse_multi_dim_tags,
     format_multi_dim_tags,
@@ -28,7 +27,7 @@ from utils.helpers import (
     unify_detected_key
 )
 from utils.cache_manager import CacheManager
-# Import configuration settings and constants
+# Import configuration settings
 from config.settings import (
     MAX_HASH_FILE_SIZE,
     HASH_TIMEOUT_SECONDS,
@@ -36,7 +35,7 @@ from config.settings import (
     KEY_REGEX,
     ENABLE_ADVANCED_AUDIO_ANALYSIS,
     ENABLE_WAVEFORM_PREVIEW,
-    TinyTag,  # May be None if not available.
+    TinyTag, 
     librosa,
     plt,
     np,
@@ -919,7 +918,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.scanner = FileScanner(folder, bpm_detection=self.chkBPM.isChecked())
             self.scanner.progress.connect(lambda cur, tot: self.progressBar.setValue(int(cur / tot * 100)))
             self.scanner.finished.connect(self.onScanFinished)
-            # Optionally clear the reference when the thread finishes
+            # Clear the reference when the thread finishes
             self.scanner.finished.connect(lambda: setattr(self, "scanner", None))
             self.scanner.start()
 
@@ -934,22 +933,19 @@ class MainWindow(QtWidgets.QMainWindow):
         Launch an asynchronous thread to find duplicate files, updating the
         progress bar so the UI remains responsive.
         """
-        # Reset or re-use progressBar
+        
         self.progressBar.setValue(0)
         
         # Create the QThread worker for duplicates
         self.duplicateFinder = DuplicateFinder(self.all_files_info)
         
-        # Connect progress signal to the progress bar
         self.duplicateFinder.progress.connect(self.onDuplicateProgress)
-        # Connect finished signal to handle results
+      
         self.duplicateFinder.finished.connect(self.onDuplicatesFound)
         
-        # Optionally clear self.duplicateFinder when finished, to prevent GC issues
         self.duplicateFinder.finished.connect(
             lambda: setattr(self, "duplicateFinder", None)
         )
-        
         # Start the worker
         self.duplicateFinder.start()
     
@@ -1131,7 +1127,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "No Selection", "Please select a file for recommendations.")
             return
 
-        # Use the first selected file as the reference
+        # Use first selected file as the reference
         source_index = self.proxyModel.mapToSource(selected_indexes[0])
         ref_file = self.model.getFileAt(source_index.row())
         ref_bpm = ref_file.get('bpm')
@@ -1143,11 +1139,11 @@ class MainWindow(QtWidgets.QMainWindow):
             if file_info['path'] == ref_file['path']:
                 continue
             similar = False
-            # Compare BPM if available
+          
             if ref_bpm is not None and file_info.get('bpm') is not None:
                 if abs(file_info['bpm'] - ref_bpm) <= 5:
                     similar = True
-            # Compare key if available
+            
             if ref_key and file_info.get('key') == ref_key:
                 similar = True
             if similar:
