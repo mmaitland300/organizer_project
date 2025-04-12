@@ -28,19 +28,18 @@ class DuplicateFinder(QtCore.QThread):
             size = file_info['size']
             size_dict.setdefault(size, []).append(file_info)
 
-        # We will track progress across all files we process in hashing
         # Count how many files we will potentially hash
         total_for_progress = len(self.files_info)
         current_count = 0
         
         duplicate_groups = []
         
-        # 2) For each group with more than 1 file, group by MD5
+        # For each group with more than 1 file, group by MD5
         for group in size_dict.values():
             if len(group) > 1:
                 hash_dict = {}
                 for fi in group:
-                    # Potentially compute or retrieve hash
+                    # Compute or retrieve hash
                     if 'hash' not in fi or fi['hash'] is None:
                         fi['hash'] = compute_hash(fi['path'])
                     h = fi['hash']
@@ -54,7 +53,7 @@ class DuplicateFinder(QtCore.QThread):
                     if len(hash_group) > 1:
                         duplicate_groups.append(hash_group)
             else:
-                # small optimization if group size=1 we do no hashing
+                # If group size=1 we do no hashing
                 current_count += len(group)
                 self.progress.emit(current_count, total_for_progress)
                 
