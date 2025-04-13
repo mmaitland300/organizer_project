@@ -7,6 +7,7 @@ This module defines the FileTableModel which is used by the UI to represent file
 import os
 from PyQt5 import QtCore
 from typing import List, Any, Dict, Optional, Union
+from services.database_manager import DatabaseManager
 from utils.helpers import format_multi_dim_tags, parse_multi_dim_tags, format_duration
 
 class FileTableModel(QtCore.QAbstractTableModel):
@@ -102,6 +103,8 @@ class FileTableModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.CheckStateRole and col == 7:
             file_info['used'] = (value == QtCore.Qt.Checked)
             self.dataChanged.emit(index, index, [role])
+            # Save to DB
+            DatabaseManager.instance().save_file_record(file_info)
             return True
         if role == QtCore.Qt.EditRole:
             if col == 4:  # Duration
@@ -125,6 +128,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
             else:
                 return False
             self.dataChanged.emit(index, index, [role])
+            DatabaseManager.instance().save_file_record(file_info)
             return True
         return False
     

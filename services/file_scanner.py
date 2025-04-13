@@ -12,6 +12,7 @@ from PyQt5 import QtCore
 from config.settings import MAX_HASH_FILE_SIZE, HASH_TIMEOUT_SECONDS, AUDIO_EXTENSIONS, ENABLE_ADVANCED_AUDIO_ANALYSIS, TinyTag, librosa, np
 from utils.helpers import compute_hash, detect_key_from_filename
 from services.cache_manager import CacheManager
+from services.database_manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -38,9 +39,10 @@ class FileScannerService(QtCore.QThread):
         total_files = 0
         for _, _, filenames in os.walk(self.root_path):
             total_files += len(filenames)
+
         files_info: List[Dict[str, Any]] = []
         current_count = 0
-        
+
         for dirpath, _, filenames in os.walk(self.root_path):
             if self._cancelled:
                 self.finished.emit(files_info)
@@ -51,13 +53,16 @@ class FileScannerService(QtCore.QThread):
                     return
                 raw_path = os.path.join(dirpath, f)
                 full_path = os.path.normpath(os.path.abspath(raw_path))
+
                 try:
                     stat = os.stat(full_path)
                     size = stat.st_size
                     mod_time_ts = stat.st_mtime
                     mod_time = datetime.datetime.fromtimestamp(mod_time_ts)
-                    
-                    extension = os.path.splitext(f)[1][1:].upper() if os.path.splitext(f)[1] else ""
+
+                    extension = os.path.splitext(f)[1].lower()
+
+                    # Base metadata
                     file_info: Dict[str, Any] = {
                         'path': full_path,
                         'size': size,
@@ -68,51 +73,60 @@ class FileScannerService(QtCore.QThread):
                         'used': False,
                         'tags': {"filetype": [extension]} if extension else {}
                     }
-                    
-                    cached = self.cache_manager.get(full_path, mod_time_ts, size)
-                    if cached:
-                        file_info.update(cached)
-                    else:
-                        ext = os.path.splitext(full_path)[1].lower()
-                        if ext in AUDIO_EXTENSIONS:
-                            if TinyTag is not None:
-                                try:
-                                    tag = TinyTag.get(full_path)
-                                    file_info['duration'] = tag.duration
-                                    file_info['samplerate'] = tag.samplerate
-                                    file_info['channels'] = tag.channels
-                                except Exception as e:
-                                    logger.error(f"Error reading audio metadata for {full_path}: {e}")
-                            if ENABLE_ADVANCED_AUDIO_ANALYSIS and self.bpm_detection and librosa is not None:
-                                try:
-                                    y, sr = librosa.load(full_path, sr=None, offset=0.0, duration=60.0, dtype=np.float32, res_type='kaiser_best')
-                                    if y is None or len(y) == 0:
-                                        logger.warning(f"Warning: {full_path} produced no audio data.")
-                                        file_info['bpm'] = None
-                                    else:
-                                        tempo = librosa.beat.tempo(y=y, sr=sr)
-                                        file_info['bpm'] = round(float(tempo[0])) if tempo.size > 0 else None
-                                except Exception as e:
-                                    logger.error(f"Error computing BPM for {full_path}: {e}", exc_info=True)
+
+                    # See if there's an existing DB record
+                    existing_record = DatabaseManager.instance().get_file_record(full_path)
+                    if existing_record:
+                        # Merge DB data
+                        file_info.update(existing_record)
+
+                    # If it's an audio file, check BPM if user wants it.
+                    if extension.lower() in [ext.lower() for ext in AUDIO_EXTENSIONS]:
+                        # Attempt TinyTag read
+                        if TinyTag is not None:
+                            try:
+                                tag = TinyTag.get(full_path)
+                                file_info['duration'] = tag.duration
+                                file_info['samplerate'] = tag.samplerate
+                                file_info['channels'] = tag.channels
+                            except Exception as e:
+                                logger.error(f"Error reading audio metadata for {full_path}: {e}")
+
+                        if self.bpm_detection and ENABLE_ADVANCED_AUDIO_ANALYSIS and librosa is not None:
+                            try:
+                                y, sr = librosa.load(
+                                    full_path,
+                                    sr=None,
+                                    offset=0.0,
+                                    duration=60.0,
+                                    dtype=np.float32,
+                                    res_type='kaiser_best'
+                                )
+                                if y is not None and len(y) > 0:
+                                    tempo = librosa.beat.tempo(y=y, sr=sr)
+                                    new_bpm = round(float(tempo[0])) if tempo.size > 0 else None
+                                    file_info['bpm'] = new_bpm
+                                    logger.debug(f"BPM DETECTED for {full_path}: {new_bpm}")
+                                else:
+                                    logger.warning(f"No audio data for BPM detection: {full_path}")
                                     file_info['bpm'] = None
-                        else:
-                            file_info['bpm'] = None
-                        
-                        file_info['key'] = detect_key_from_filename(full_path)
-                        
-                        self.cache_manager.update(full_path, mod_time_ts, size, {
-                            'duration': file_info.get('duration'),
-                            'bpm': file_info.get('bpm'),
-                            'key': file_info.get('key'),
-                            'samplerate': file_info.get('samplerate', None),
-                            'channels': file_info.get('channels', None)
-                        })
+                            except Exception as e:
+                                logger.error(f"Error computing BPM for {full_path}: {e}", exc_info=True)
+                                file_info['bpm'] = None
+
+                    # Save updated record in DB
+                    DatabaseManager.instance().save_file_record(file_info)
+
+                    # Also keep in local list for immediate reference
                     files_info.append(file_info)
+
                 except Exception as e:
                     logger.error(f"Error scanning {full_path}: {e}")
+
                 current_count += 1
                 if current_count % 100 == 0:
                     self.progress.emit(current_count, total_files)
+
         self.cache_manager.save_cache()
         self.progress.emit(total_files, total_files)
         self.finished.emit(files_info)

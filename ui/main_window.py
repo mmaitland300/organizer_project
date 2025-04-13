@@ -18,6 +18,7 @@ from models.file_model import FileTableModel, FileFilterProxyModel
 from services.file_scanner import FileScannerService
 from services.duplicate_finder import DuplicateFinderService
 from services.auto_tagger import AutoTagService
+from services.database_manager import DatabaseManager
 from utils.helpers import bytes_to_unit, open_file_location
 from config.settings import AUDIO_EXTENSIONS
 from ui.dialogs.duplicate_manager_dialog import DuplicateManagerDialog
@@ -242,6 +243,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.size_unit = self.comboSizeUnit.currentText()
         self.model.size_unit = self.size_unit
         self.model.updateData(self.all_files_info)
+        self.updateSummaryLabel()
     
     def editTagsForSelectedFile(self) -> None:
         selected_indexes = self.tableView.selectionModel().selectedRows()
@@ -386,7 +388,14 @@ class MainWindow(QtWidgets.QMainWindow):
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             self.last_folder = folder
-            self.scanner = FileScannerService(folder, bpm_detection=self.chkBPM.isChecked())
+
+            db = DatabaseManager.instance()
+            db.delete_files_in_folder(folder)
+
+            self.scanner = FileScannerService(
+                folder, 
+                bpm_detection=self.chkBPM.isChecked()
+            )
             self.scanner.progress.connect(lambda cur, tot: self.progressBar.setValue(int(cur / tot * 100)))
             self.scanner.finished.connect(self.onScanFinished)
             self.scanner.finished.connect(lambda: setattr(self, "scanner", None))
@@ -394,10 +403,21 @@ class MainWindow(QtWidgets.QMainWindow):
     
     def onScanFinished(self, files: List[Dict[str, Any]]) -> None:
         self.progressBar.setValue(100)
-        self.all_files_info = files
-        self.model.updateData(files)
-        total_size = sum(file["size"] for file in files)
-        self.labelSummary.setText(f"Scanned {len(files)} files. Total size: {bytes_to_unit(total_size, self.size_unit):.2f} {self.size_unit}.")
+
+        db = DatabaseManager.instance()
+
+        folder_files = db.get_files_in_folder(self.last_folder)
+        
+        self.all_files_info = folder_files
+        self.model.updateData(folder_files)
+
+        from utils.helpers import bytes_to_unit
+        total_size = sum(f["size"] for f in folder_files)
+        converted_size = bytes_to_unit(total_size, self.size_unit)
+        self.labelSummary.setText(
+            f"Scanned {len(folder_files)} files. "
+            f"Total size: {converted_size:.2f} {self.size_unit} (approx)."
+        )
     
     def findDuplicates(self) -> None:
         self.progressBar.setValue(0)
@@ -452,6 +472,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     send2trash(file_info["path"])
                 else:
                     os.remove(file_info["path"])
+                # Also remove from DB
+                from services.database_manager import DatabaseManager
+                DatabaseManager.instance().delete_file_record(file_info["path"])
+
                 indices_to_delete.append(source_index.row())
             except Exception as e:
                 errors.append(f"Error deleting {file_info['path']}: {str(e)}")
@@ -536,3 +560,15 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Error", f"Failed to send {file_info['path']} to Cubase: {e}")
         QtWidgets.QMessageBox.information(self, "Send to Cubase", "Files sent to Cubase successfully.")
+
+    def updateSummaryLabel(self) -> None:
+        if not self.all_files_info:
+            self.labelSummary.setText("No files scanned.")
+            return
+        from utils.helpers import bytes_to_unit
+        total_size = sum(f["size"] for f in self.all_files_info)
+        converted_size = bytes_to_unit(total_size, self.size_unit)
+        self.labelSummary.setText(
+            f"Scanned {len(self.all_files_info)} files. "
+            f"Total size: {converted_size:.2f} {self.size_unit} (approx)."
+        )
