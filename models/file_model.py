@@ -1,15 +1,20 @@
-# Required Imports
+"""
+File models for Musicians Organizer.
+
+This module defines the FileTableModel which is used by the UI to represent file metadata.
+"""
+
 import os
 from PyQt5 import QtCore
-from typing import List, Any, Dict, Optional, Union, Optional
-# Import helper functions for tag formatting and parsing.
+from typing import List, Any, Dict, Optional, Union
 from utils.helpers import format_multi_dim_tags, parse_multi_dim_tags, format_duration
 
-# -------------------------- File Table Model --------------------------
 class FileTableModel(QtCore.QAbstractTableModel):
     """
-    Custom model to hold file data.
-    Columns: File Path, File Name, Size, Modified Date, Duration, BPM, Key, Used, Sample Rate, Channels, Tags.
+    Custom table model to hold file metadata.
+
+    Columns include:
+      - File Path, File Name, Size, Modified Date, Duration, BPM, Key, Used, Sample Rate, Channels, Tags.
     """
     COLUMN_HEADERS = [
         "File Path",
@@ -24,18 +29,18 @@ class FileTableModel(QtCore.QAbstractTableModel):
         "Channels",
         "Tags"
     ]
-
+    
     def __init__(self, files: Optional[List[Dict[str, Any]]] = None, size_unit: str = "KB", parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
         self._files = files if files is not None else []
         self.size_unit = size_unit
-
+        
     def rowCount(self, parent: Optional[QtCore.QModelIndex] = None) -> int:
         return len(self._files)
-
+    
     def columnCount(self, parent: Optional[QtCore.QModelIndex] = None) -> int:
         return len(self.COLUMN_HEADERS)
-
+    
     def data(self, index: QtCore.QModelIndex, role: int = QtCore.Qt.DisplayRole) -> Any:
         if not index.isValid():
             return None
@@ -70,7 +75,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.CheckStateRole and col == 7:
             return QtCore.Qt.Checked if file_info.get('used', False) else QtCore.Qt.Unchecked
         return None
-
+    
     def headerData(self, section: int, orientation: QtCore.Qt.Orientation, role: int = QtCore.Qt.DisplayRole) -> Any:
         if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
             if 0 <= section < len(self.COLUMN_HEADERS):
@@ -122,7 +127,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
             self.dataChanged.emit(index, index, [role])
             return True
         return False
-
+    
     def _parse_duration(self, text: str) -> Optional[float]:
         try:
             parts = text.split(':')
@@ -133,7 +138,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
             return minutes * 60 + seconds
         except Exception:
             return None
-
+        
     def format_size(self, size_in_bytes: Union[int, float]) -> str:
         if self.size_unit == "KB":
             return f"{size_in_bytes / 1024:.2f} KB"
@@ -143,26 +148,26 @@ class FileTableModel(QtCore.QAbstractTableModel):
             return f"{size_in_bytes / (1024 ** 3):.2f} GB"
         else:
             return str(size_in_bytes)
-
+    
     def updateData(self, files: List[Dict[str, Any]]) -> None:
         self.beginResetModel()
         self._files = files
         self.endResetModel()
-
+    
     def getFileAt(self, row: int) -> Optional[Dict[str, Any]]:
         if 0 <= row < len(self._files):
             return self._files[row]
         return None
 
-# -------------------------- Filter Proxy Model --------------------------
+
 class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
     """
-    Proxy model for filtering files by their path, tags, and optionally by "used" status.
+    Proxy model for filtering files by their name (or other columns) and optionally by "used" status.
     """
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
         self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
-        self.setFilterKeyColumn(1)
+        self.setFilterKeyColumn(1)  # Assuming column 1 is the file name.
         self.onlyUnused = False
 
     def setOnlyUnused(self, flag: bool) -> None:
@@ -170,11 +175,11 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         self.invalidateFilter()
 
     def filterAcceptsRow(self, source_row: int, source_parent: QtCore.QModelIndex) -> bool:
-        if not super().filterAcceptsRow(source_row, source_parent):
-            return False
+        # If filtering only for unused files, skip the row if it is marked as used.
         if self.onlyUnused:
-            source_model = self.sourceModel()
-            file_info = source_model.getFileAt(source_row)
-            if file_info and file_info.get('used', False):
+            # Retrieve the file info from the source model.
+            file_info = self.sourceModel().getFileAt(source_row)
+            if file_info and file_info.get("used", False):
                 return False
-        return True
+        # Continue with the standard text filtering.
+        return super().filterAcceptsRow(source_row, source_parent)

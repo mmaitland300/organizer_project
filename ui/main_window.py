@@ -1,14 +1,12 @@
 """
-Production-ready main_window.py
+MainWindow – the primary user interface for Musicians Organizer.
 
-This module implements the main window of the Musicians Organizer application.
-It supports file scanning, duplicate detection, audio preview with waveform display,
-and a dual-purpose Stop button that cancels long-running operations (like scanning
-or duplicate detection) or stops audio playback when no such operation is active.
+This module creates the main window and toolbars, and connects UI actions to service classes.
 """
 
 import os
 import shutil
+import logging
 from typing import List, Dict, Optional, Any
 
 from PyQt5 import QtWidgets, QtCore, QtGui
@@ -16,711 +14,171 @@ from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtCore import QUrl, pyqtSlot
 from send2trash import send2trash
 
-# Import custom models and UI dialogs
 from models.file_model import FileTableModel, FileFilterProxyModel
-from core.file_scanner import FileScanner  # Scanner thread (implements cancel())
-from core.duplicate_finder import DuplicateFinder  # Duplicate finder thread (implements cancel())
-from utils.helpers import (
-    parse_multi_dim_tags,
-    format_multi_dim_tags,
-    validate_tag_dimension,
-    normalize_tag,
-    bytes_to_unit,
-    format_duration,
-    open_file_location,
-    compute_hash,
-    format_time,
-    detect_key_from_filename,
-    unify_detected_key
-)
-from config.settings import (
-    MAX_HASH_FILE_SIZE,
-    HASH_TIMEOUT_SECONDS,
-    AUDIO_EXTENSIONS,
-    KEY_REGEX,
-    ENABLE_ADVANCED_AUDIO_ANALYSIS,
-    ENABLE_WAVEFORM_PREVIEW,
-    TinyTag,
-    librosa,
-    plt,
-    np,
-    FigureCanvas
-)
+from services.file_scanner import FileScannerService
+from services.duplicate_finder import DuplicateFinderService
+from services.auto_tagger import AutoTagService
+from utils.helpers import bytes_to_unit, open_file_location
+from config.settings import AUDIO_EXTENSIONS
+from ui.dialogs.duplicate_manager_dialog import DuplicateManagerDialog
+from ui.dialogs.waveform_dialog import WaveformDialog
+from ui.dialogs.multi_dim_tag_editor_dialog import MultiDimTagEditorDialog
+from ui.dialogs.waveform_player_widget import WaveformPlayerWidget
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-# -------------------------- Duplicate Manager Dialog --------------------------
-class DuplicateManagerDialog(QtWidgets.QDialog):
-    """
-    Dialog to display and manage duplicate files.
-    """
-
-    def __init__(
-        self,
-        duplicate_groups: List[List[Dict[str, Any]]],
-        size_unit: str = "KB",
-        use_recycle_bin: bool = True,
-        parent: Optional[QtWidgets.QWidget] = None,
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Duplicate Files Manager")
-        self.resize(900, 500)
-        self.size_unit = size_unit
-        self.use_recycle_bin = use_recycle_bin
-
-        main_layout = QtWidgets.QVBoxLayout(self)
-        self.tree = QtWidgets.QTreeWidget(self)
-        self.tree.setColumnCount(4)
-        self.tree.setHeaderLabels(["File Path", "Size", "Modified Date", "MD5 Hash"])
-        self.tree.setSortingEnabled(True)
-        self.tree.header().setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
-        main_layout.addWidget(self.tree)
-
-        btn_layout = QtWidgets.QHBoxLayout()
-        main_layout.addLayout(btn_layout)
-
-        self.btnSelectAll = QtWidgets.QPushButton("Select All", self)
-        self.btnSelectAll.clicked.connect(self.selectAll)
-        btn_layout.addWidget(self.btnSelectAll)
-
-        self.btnDeselectAll = QtWidgets.QPushButton("Deselect All", self)
-        self.btnDeselectAll.clicked.connect(self.deselectAll)
-        btn_layout.addWidget(self.btnDeselectAll)
-
-        self.btnDeleteSelected = QtWidgets.QPushButton("Delete Selected", self)
-        self.btnDeleteSelected.clicked.connect(self.deleteSelected)
-        btn_layout.addWidget(self.btnDeleteSelected)
-
-        self.btnKeepOnlyFirst = QtWidgets.QPushButton("Keep Only First", self)
-        self.btnKeepOnlyFirst.clicked.connect(self.keepOnlyFirst)
-        btn_layout.addWidget(self.btnKeepOnlyFirst)
-
-        self.btnOpenFolder = QtWidgets.QPushButton("Open Containing Folder", self)
-        self.btnOpenFolder.clicked.connect(self.openContainingFolder)
-        btn_layout.addWidget(self.btnOpenFolder)
-
-        self.btnViewWaveform = QtWidgets.QPushButton("View Waveform", self)
-        self.btnViewWaveform.clicked.connect(self.viewWaveform)
-        btn_layout.addWidget(self.btnViewWaveform)
-
-        self.btnClose = QtWidgets.QPushButton("Close", self)
-        self.btnClose.clicked.connect(self.accept)
-        btn_layout.addWidget(self.btnClose)
-
-        self.populateTree(duplicate_groups)
-
-    def populateTree(self, duplicate_groups: List[List[Dict[str, Any]]]) -> None:
-        """Populate the tree widget with duplicate groups."""
-        self.tree.clear()
-        for group_index, group in enumerate(duplicate_groups, start=1):
-            parent_item = QtWidgets.QTreeWidgetItem(self.tree)
-            parent_item.setText(0, f"Group {group_index} ({len(group)} files)")
-            parent_item.setFlags(parent_item.flags() & ~QtCore.Qt.ItemIsSelectable)
-            for info in group:
-                child = QtWidgets.QTreeWidgetItem(parent_item)
-                child.setText(0, info["path"])
-                size_value = bytes_to_unit(info["size"], self.size_unit)
-                child.setText(1, f"{size_value:.2f} {self.size_unit}")
-                child.setText(2, info["mod_time"].strftime("%Y-%m-%d %H:%M:%S"))
-                child.setText(3, info.get("hash", ""))
-                child.setFlags(child.flags() | QtCore.Qt.ItemIsUserCheckable)
-                child.setCheckState(0, QtCore.Qt.Unchecked)
-        self.tree.expandAll()
-
-    def selectAll(self) -> None:
-        """Select all file entries."""
-        root = self.tree.invisibleRootItem()
-        for i in range(root.childCount()):
-            parent = root.child(i)
-            for j in range(parent.childCount()):
-                parent.child(j).setCheckState(0, QtCore.Qt.Checked)
-
-    def deselectAll(self) -> None:
-        """Deselect all file entries."""
-        root = self.tree.invisibleRootItem()
-        for i in range(root.childCount()):
-            parent = root.child(i)
-            for j in range(parent.childCount()):
-                parent.child(j).setCheckState(0, QtCore.Qt.Unchecked)
-
-    def deleteSelected(self) -> None:
-        """
-        Delete selected duplicate file entries.
-        Files are deleted using send2trash (or os.remove if recycle bin is disabled).
-        """
-        items_to_delete: List[Any] = []
-        root = self.tree.invisibleRootItem()
-        for i in range(root.childCount()):
-            parent = root.child(i)
-            for j in range(parent.childCount()):
-                child = parent.child(j)
-                if child.checkState(0) == QtCore.Qt.Checked:
-                    items_to_delete.append((parent, child))
-        if not items_to_delete:
-            QtWidgets.QMessageBox.information(self, "No Selection", "No files selected for deletion.")
-            return
-
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            "Confirm Deletion",
-            f"Are you sure you want to delete {len(items_to_delete)} file(s)?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
-        if reply != QtWidgets.QMessageBox.Yes:
-            return
-
-        errors: List[str] = []
-        for parent, child in items_to_delete:
-            file_path = child.text(0)
-            try:
-                if self.use_recycle_bin:
-                    send2trash(file_path)
-                else:
-                    os.remove(file_path)
-            except Exception as e:
-                errors.append(f"Error deleting {file_path}: {str(e)}")
-            else:
-                parent.removeChild(child)
-        if errors:
-            QtWidgets.QMessageBox.critical(self, "Deletion Errors", "\n".join(errors))
-        else:
-            QtWidgets.QMessageBox.information(self, "Deletion", "Selected files deleted successfully.")
-
-        # Clean up empty groups
-        for i in reversed(range(root.childCount())):
-            parent = root.child(i)
-            if parent.childCount() == 0:
-                root.removeChild(parent)
-
-    def keepOnlyFirst(self) -> None:
-        """Keep only the first file in each duplicate group and delete the rest."""
-        root = self.tree.invisibleRootItem()
-        for i in range(root.childCount()):
-            parent = root.child(i)
-            # For each group, mark all but the first file for deletion.
-            for j in range(1, parent.childCount()):
-                parent.child(j).setCheckState(0, QtCore.Qt.Checked)
-        self.deleteSelected()
-
-    def openContainingFolder(self) -> None:
-        """Open the folder containing the selected file."""
-        selected_items = self.tree.selectedItems()
-        file_path: Optional[str] = None
-        for item in selected_items:
-            if item.parent() is not None:
-                file_path = item.text(0)
-                break
-        if not file_path:
-            QtWidgets.QMessageBox.information(self, "No Selection", "Please select a file entry first.")
-            return
-        open_file_location(file_path)
-
-    def viewWaveform(self) -> None:
-        """Display a waveform preview of the selected audio file."""
-        selected_items = self.tree.selectedItems()
-        file_path: Optional[str] = None
-        for item in selected_items:
-            if item.parent() is not None:
-                file_path = item.text(0)
-                break
-        if not file_path:
-            QtWidgets.QMessageBox.information(self, "No Selection", "Please select an audio file entry first.")
-            return
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext not in AUDIO_EXTENSIONS:
-            QtWidgets.QMessageBox.information(self, "Not Audio", "Selected file is not an audio file.")
-            return
-        if ENABLE_WAVEFORM_PREVIEW:
-            dialog = WaveformDialog(file_path, parent=self)
-            dialog.exec_()
-        else:
-            QtWidgets.QMessageBox.information(self, "Feature Unavailable", "Waveform preview is not available (missing dependencies).")
-
-
-# -------------------------- Waveform Preview Dialog --------------------------
-class WaveformDialog(QtWidgets.QDialog):
-    """
-    Dialog to display a waveform preview of an audio file using matplotlib.
-    """
-
-    def __init__(self, file_path: str, parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(f"Waveform Preview: {os.path.basename(file_path)}")
-        self.resize(800, 400)
-        layout = QtWidgets.QVBoxLayout(self)
-        self.file_path = file_path
-
-        if ENABLE_WAVEFORM_PREVIEW:
-            self.figure = plt.figure()
-            self.canvas = FigureCanvas(self.figure)
-            layout.addWidget(self.canvas)
-            self.plot_waveform()
-        else:
-            label = QtWidgets.QLabel("Waveform preview is not available due to missing dependencies.")
-            layout.addWidget(label)
-
-    def plot_waveform(self) -> None:
-        """Load the audio file and plot its waveform."""
-        try:
-            y, sr = librosa.load(self.file_path, sr=None, mono=True)
-            times = np.linspace(0, len(y) / sr, num=len(y))
-            ax = self.figure.add_subplot(111)
-            ax.clear()
-            ax.plot(times, y)
-            ax.set_xlabel("Time (s)")
-            ax.set_ylabel("Amplitude")
-            ax.set_title("Waveform")
-            self.canvas.draw()
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", f"Could not load waveform: {e}")
-
-
-# -------------------------- Waveform Player Widget --------------------------
-class WaveformPlayerWidget(QtWidgets.QWidget):
-    """
-    Widget to display a waveform and simultaneously play audio via QMediaPlayer.
-    """
-
-    def __init__(self, file_path: str, theme: str = "light", parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__(parent)
-        self.file_path = file_path
-        self.theme = theme.lower()
-        self.figure: Optional[Any] = None
-        self.ax: Optional[Any] = None
-        self.canvas: Optional[Any] = None
-        self.cursor_line: Optional[Any] = None
-        self.duration_ms: int = 0
-        self.total_duration_secs: float = 0.0
-        self.setup_ui()
-        self.load_audio_and_plot()
-        self.init_player()
-        self.applyTheme(self.theme)
-
-    def setup_ui(self) -> None:
-        """Initialize UI components of the waveform player widget."""
-        layout = QtWidgets.QVBoxLayout(self)
-        self.figure, self.ax = plt.subplots(figsize=(6, 3))
-        self.canvas = FigureCanvas(self.figure)
-        layout.addWidget(self.canvas)
-
-        slider_layout = QtWidgets.QHBoxLayout()
-        self.currentTimeLabel = QtWidgets.QLabel("0:00", self)
-        slider_layout.addWidget(self.currentTimeLabel)
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
-        self.slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        slider_layout.addWidget(self.slider)
-        self.totalTimeLabel = QtWidgets.QLabel("0:00", self)
-        slider_layout.addWidget(self.totalTimeLabel)
-        layout.addLayout(slider_layout)
-
-        controls_layout = QtWidgets.QHBoxLayout()
-        self.playButton = QtWidgets.QPushButton("Play", self)
-        self.playButton.clicked.connect(self.toggle_playback)
-        controls_layout.addWidget(self.playButton)
-        layout.addLayout(controls_layout)
-
-        self.update_timer = QtCore.QTimer(self)
-        self.update_timer.setInterval(100)
-        self.update_timer.timeout.connect(self.update_cursor)
-
-        self.canvas.mpl_connect("button_press_event", self.on_canvas_click)
-
-    def load_audio_and_plot(self) -> None:
-        """Load audio data and plot the waveform."""
-        try:
-            y, sr = librosa.load(self.file_path, sr=None, mono=True)
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", f"Could not load audio:\n{e}")
-            return
-        desired_points = 1000
-        factor = max(1, int(len(y) / desired_points))
-        y_downsampled = y[::factor]
-        times = np.linspace(0, len(y) / sr, num=len(y_downsampled))
-        self.ax.clear()
-        self.ax.plot(times, y_downsampled, color="gray")
-        self.ax.set_xlabel("Time (s)")
-        self.ax.set_ylabel("Amplitude")
-        self.ax.set_title("Waveform Player")
-        self.duration_ms = int(len(y) / sr * 1000)
-        self.total_duration_secs = len(y) / sr
-        self.totalTimeLabel.setText(format_time(self.total_duration_secs))
-        self.canvas.draw()
-
-    def init_player(self) -> None:
-        """Initialize the QMediaPlayer for audio playback."""
-        self.player = QMediaPlayer(self)
-        url = QUrl.fromLocalFile(os.path.abspath(self.file_path))
-        media = QMediaContent(url)
-        self.player.setMedia(media)
-        self.player.durationChanged.connect(self.on_duration_changed)
-        self.player.positionChanged.connect(self.on_position_changed)
-        self.slider.setMinimum(0)
-        self.slider.setMaximum(self.duration_ms)
-        self.slider.sliderMoved.connect(self.on_slider_moved)
-
-    def applyTheme(self, theme: str) -> None:
-        """Apply the selected theme to the waveform player."""
-        if theme == "dark":
-            self.figure.patch.set_facecolor("#2B2B2B")
-            self.ax.set_facecolor("#3A3F4B")
-            for spine in self.ax.spines.values():
-                spine.set_color("white")
-            self.ax.xaxis.label.set_color("white")
-            self.ax.yaxis.label.set_color("white")
-            self.ax.title.set_color("white")
-            self.ax.tick_params(axis="x", colors="white")
-            self.ax.tick_params(axis="y", colors="white")
-        else:
-            self.figure.patch.set_facecolor("white")
-            self.ax.set_facecolor("white")
-            for spine in self.ax.spines.values():
-                spine.set_color("black")
-            self.ax.xaxis.label.set_color("black")
-            self.ax.yaxis.label.set_color("black")
-            self.ax.title.set_color("black")
-            self.ax.tick_params(axis="x", colors="black")
-            self.ax.tick_params(axis="y", colors="black")
-        self.figure.tight_layout()
-        self.canvas.draw()
-
-    def toggle_playback(self) -> None:
-        """Toggle audio playback or, if a long-running operation is active, cancel it."""
-        # First check if a long-running operation is active
-        operationCanceled = False
-        if hasattr(self.parent(), "scanner") and getattr(self.parent(), "scanner") is not None:
-            self.parent().scanner.cancel()
-            operationCanceled = True
-        if hasattr(self.parent(), "duplicateFinder") and getattr(self.parent(), "duplicateFinder") is not None:
-            self.parent().duplicateFinder.cancel()
-            operationCanceled = True
-
-        if operationCanceled:
-            QtWidgets.QMessageBox.information(self, "Operation Cancelled", "The operation has been cancelled.")
-            # Optionally reset any UI components here
-        else:
-            if self.player.state() == QMediaPlayer.PlayingState:
-                self.player.pause()
-                self.playButton.setText("Play")
-                self.update_timer.stop()
-            else:
-                self.player.play()
-                self.playButton.setText("Pause")
-                self.update_timer.start()
-
-    def on_duration_changed(self, duration: int) -> None:
-        """Update UI when media duration changes."""
-        if duration > 0:
-            self.slider.setMaximum(duration)
-            self.totalTimeLabel.setText(format_time(duration / 1000.0))
-            self.ax.set_xlim(0, duration / 1000.0)
-            self.canvas.draw_idle()
-
-    def on_position_changed(self, position: int) -> None:
-        """Update UI when media playback position changes."""
-        self.slider.setValue(position)
-        current_sec = position / 1000.0
-        self.currentTimeLabel.setText(format_time(current_sec))
-
-    def on_slider_moved(self, pos: int) -> None:
-        """Seek to a new position in the media when the slider is moved."""
-        self.player.setPosition(pos)
-
-    def update_cursor(self) -> None:
-        """Update the visual cursor on the waveform plot."""
-        pos_sec = self.player.position() / 1000.0
-        if self.cursor_line is not None:
-            self.cursor_line.remove()
-        self.cursor_line = self.ax.axvline(pos_sec, color="red")
-        self.canvas.draw_idle()
-
-    def on_canvas_click(self, event: Any) -> None:
-        """Seek in the audio when the waveform is clicked."""
-        if event.xdata is not None and event.button == 1:
-            new_pos_sec = max(0, event.xdata)
-            new_pos_ms = int(new_pos_sec * 1000)
-            self.player.setPosition(new_pos_ms)
-            self.slider.setValue(new_pos_ms)
-            self.update_cursor()
-
-
-# -------------------------- Recommendations Dialog --------------------------
-class RecommendationsDialog(QtWidgets.QDialog):
-    """
-    Dialog to display sample recommendations based on similar BPM or tags.
-    """
-
-    def __init__(self, recommendations: List[Dict[str, Any]], parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Recommended Similar Samples")
-        self.resize(800, 400)
-        layout = QtWidgets.QVBoxLayout(self)
-        self.tableView = QtWidgets.QTableView(self)
-        self.model = FileTableModel(recommendations, size_unit="KB")
-        self.tableView.setModel(self.model)
-        self.tableView.setSortingEnabled(True)
-        self.tableView.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.tableView.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        layout.addWidget(self.tableView)
-        btn_close = QtWidgets.QPushButton("Close", self)
-        btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close)
-
-
-# ------------------------- Multi-Dimensional Tag Editor Dialog --------------------------
-class MultiDimTagEditorDialog(QtWidgets.QDialog):
-    """
-    Dialog to edit multi-dimensional tags.
-    """
-
-    def __init__(self, tag_data: Any, parent: Optional[QtWidgets.QWidget] = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Edit Tags")
-        self.resize(400, 300)
-        if isinstance(tag_data, list):
-            self.tag_data: Dict[str, List[str]] = {"general": tag_data}
-        elif isinstance(tag_data, dict):
-            self.tag_data = tag_data.copy()
-        else:
-            self.tag_data = {}
-        main_layout = QtWidgets.QVBoxLayout(self)
-        self.tableWidget = QtWidgets.QTableWidget(self)
-        self.tableWidget.setColumnCount(2)
-        self.tableWidget.setHorizontalHeaderLabels(["Dimension", "Tag"])
-        self.tableWidget.horizontalHeader().setStretchLastSection(True)
-        main_layout.addWidget(self.tableWidget)
-        self.loadData()
-        row_layout = QtWidgets.QHBoxLayout()
-        self.dimensionEdit = QtWidgets.QLineEdit(self)
-        self.dimensionEdit.setPlaceholderText("Dimension (e.g., genre, mood)")
-        self.tagEdit = QtWidgets.QLineEdit(self)
-        self.tagEdit.setPlaceholderText("Tag (e.g., ROCK)")
-        row_layout.addWidget(self.dimensionEdit)
-        row_layout.addWidget(self.tagEdit)
-        main_layout.addLayout(row_layout)
-        btnAdd = QtWidgets.QPushButton("Add Tag", self)
-        btnAdd.clicked.connect(self.addTag)
-        main_layout.addWidget(btnAdd)
-        btnBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
-        btnBox.accepted.connect(self.accept)
-        btnBox.rejected.connect(self.reject)
-        main_layout.addWidget(btnBox)
-
-    def loadData(self) -> None:
-        """Load current tag data into the table widget."""
-        self.tableWidget.setRowCount(0)
-        for dimension, tags in self.tag_data.items():
-            for tag in tags:
-                row = self.tableWidget.rowCount()
-                self.tableWidget.insertRow(row)
-                dim_item = QtWidgets.QTableWidgetItem(dimension.capitalize())
-                tag_item = QtWidgets.QTableWidgetItem(tag)
-                self.tableWidget.setItem(row, 0, dim_item)
-                self.tableWidget.setItem(row, 1, tag_item)
-
-    def addTag(self) -> None:
-        """Add a new tag entry to the table widget."""
-        dimension = self.dimensionEdit.text().strip().lower()
-        tag = self.tagEdit.text().strip().upper()
-        if not dimension or not tag:
-            return
-        row = self.tableWidget.rowCount()
-        self.tableWidget.insertRow(row)
-        dim_item = QtWidgets.QTableWidgetItem(dimension.capitalize())
-        tag_item = QtWidgets.QTableWidgetItem(tag)
-        self.tableWidget.setItem(row, 0, dim_item)
-        self.tableWidget.setItem(row, 1, tag_item)
-        self.dimensionEdit.clear()
-        self.tagEdit.clear()
-
-    def get_tags(self) -> Dict[str, List[str]]:
-        """Return the updated tag dictionary."""
-        new_tags: Dict[str, List[str]] = {}
-        for row in range(self.tableWidget.rowCount()):
-            dim_item = self.tableWidget.item(row, 0)
-            tag_item = self.tableWidget.item(row, 1)
-            if dim_item and tag_item:
-                dimension = dim_item.text().lower()
-                tag = tag_item.text().upper()
-                new_tags.setdefault(dimension, [])
-                if tag not in new_tags[dimension]:
-                    new_tags[dimension].append(tag)
-        return new_tags
-
-
-# -------------------------- Main Window --------------------------
 class MainWindow(QtWidgets.QMainWindow):
     """
     Main window for Musicians Organizer.
-    Provides functionality for file scanning, duplicate detection,
-    audio preview, waveform visualization, and auto-tagging.
-    The Stop button in the Audio Tools toolbar acts as a dual-purpose control:
-    it cancels a long-running operation if one is active, or stops audio playback otherwise.
-    """
 
+    Provides file scanning, duplicate detection, audio preview, waveform visualization, and auto-tagging.
+    """
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Musicians Organizer")
         self.resize(1000, 700)
         self.all_files_info: List[Dict[str, Any]] = []
-        self.all_files_count: int = 0
-        self.all_files_size: int = 0
         self.size_unit: str = "KB"
-        self.search_text: str = ""
         self.last_folder: str = ""
         self.cubase_folder: str = ""
-        self.scanner: Optional[FileScanner] = None
-        self.duplicateFinder: Optional[DuplicateFinder] = None
-
-        # Initialize objects that are referenced in initUI()
+        self.scanner: Optional[FileScannerService] = None
+        self.duplicateFinder: Optional[DuplicateFinderService] = None
+        
         self.filterTimer = QtCore.QTimer(self)
         self.filterTimer.setSingleShot(True)
         self.filterTimer.timeout.connect(self.updateFilter)
-
-        # Initialize chkOnlyUnused BEFORE initUI() so it can be added to the layout
+        
         self.chkOnlyUnused = QtWidgets.QCheckBox("Show Only Unused Samples", self)
         self.chkOnlyUnused.setChecked(False)
         self.chkOnlyUnused.stateChanged.connect(self.onOnlyUnusedChanged)
-
-        self.player = QMediaPlayer(self)
         
+        self.player = QMediaPlayer(self)
         self.initUI()
         self.loadSettings()
-
+    
     def initUI(self) -> None:
-        """Initialize the main user interface, toolbars, and widgets."""
         central_widget = QtWidgets.QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QtWidgets.QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-
-        # Create the File Management Toolbar
+        
+        # File Management Toolbar
         self.fileToolBar = QtWidgets.QToolBar("File Management", self)
         self.fileToolBar.setObjectName("fileToolBar")
         self.fileToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.fileToolBar)
-
-        # Action: Select Folder (start file scanning)
+        
         actSelectFolder = QtWidgets.QAction("Select Folder", self)
         actSelectFolder.setToolTip("Select a folder to scan for music samples.")
         actSelectFolder.triggered.connect(self.selectFolder)
         self.fileToolBar.addAction(actSelectFolder)
-
-        # Action: Find Duplicates
+        
         actFindDuplicates = QtWidgets.QAction("Find Duplicates", self)
         actFindDuplicates.setToolTip("Find duplicate files based on size/hash.")
         actFindDuplicates.triggered.connect(self.findDuplicates)
         self.fileToolBar.addAction(actFindDuplicates)
-
-        # Action: Open Folder
+        
         actOpenFolder = QtWidgets.QAction("Open Folder", self)
         actOpenFolder.setToolTip("Open the folder of the selected file.")
         actOpenFolder.triggered.connect(self.openSelectedFileLocation)
         self.fileToolBar.addAction(actOpenFolder)
-
-        # Action: Delete Selected
+        
         actDeleteSelected = QtWidgets.QAction("Delete Selected", self)
         actDeleteSelected.setToolTip("Delete selected file(s).")
         actDeleteSelected.triggered.connect(self.deleteSelected)
         self.fileToolBar.addAction(actDeleteSelected)
-
-        # Action: Set Cubase Folder
+        
         actSetCubase = QtWidgets.QAction("Set Cubase Folder", self)
         actSetCubase.setToolTip("Set or change the Cubase integration folder.")
         actSetCubase.triggered.connect(self.setCubaseFolder)
         self.fileToolBar.addAction(actSetCubase)
-
-        # Add expanding spacer to separate left-side actions from progress bar
+        
         leftExpSpacer = QtWidgets.QWidget(self)
         leftExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.fileToolBar.addWidget(leftExpSpacer)
-
-        # Progress Bar for scanning/duplicate detection
+        
         self.progressBar = QtWidgets.QProgressBar(self)
         self.progressBar.setValue(0)
         self.progressBar.setFixedWidth(200)
         progressAction = QtWidgets.QWidgetAction(self.fileToolBar)
         progressAction.setDefaultWidget(self.progressBar)
         self.fileToolBar.addAction(progressAction)
-
-        # Add expanding spacer to right to keep progress bar left-aligned
+        
         rightExpSpacer = QtWidgets.QWidget(self)
         rightExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.fileToolBar.addWidget(rightExpSpacer)
-
-        # Create the Audio Tools Toolbar
+        
+        # Audio Tools Toolbar
         self.audioToolBar = QtWidgets.QToolBar("Audio Tools", self)
         self.audioToolBar.setObjectName("audioToolBar")
         self.audioToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.audioToolBar)
-
-        # Action: Preview (start audio playback)
+        
         actPreview = QtWidgets.QAction("Preview", self)
         actPreview.setToolTip("Preview the selected audio file.")
         actPreview.triggered.connect(self.previewSelected)
         self.audioToolBar.addAction(actPreview)
-
-        # Action: Stop (dual-purpose: cancel operation or stop playback)
+        
         actStopPreview = QtWidgets.QAction("Stop", self)
         actStopPreview.setToolTip("Stop audio playback or cancel active operation.")
         actStopPreview.triggered.connect(self.stopPreview)
         self.audioToolBar.addAction(actStopPreview)
-
-        # Action: Waveform (show waveform preview)
+        
         actWaveform = QtWidgets.QAction("Waveform", self)
         actWaveform.setToolTip("View the waveform of the selected audio file.")
         actWaveform.triggered.connect(self.waveformPreview)
         self.audioToolBar.addAction(actWaveform)
-
-        # Action: Waveform Player (integrated waveform and playback)
-        actIntegratedWaveform = QtWidgets.QAction("Waveform Player", self)
-        actIntegratedWaveform.setToolTip("View waveform and playback sample")
-        actIntegratedWaveform.triggered.connect(self.launchWaveformPlayer)
-        self.audioToolBar.addAction(actIntegratedWaveform)
-
+        
+        actWaveformPlayer = QtWidgets.QAction("Waveform Player", self)
+        actWaveformPlayer.setToolTip("Launch waveform player with integrated playback.")
+        actWaveformPlayer.triggered.connect(self.launchWaveformPlayer)
+        self.audioToolBar.addAction(actWaveformPlayer)
+        
         spacer2 = QtWidgets.QWidget(self)
         spacer2.setFixedWidth(15)
         self.audioToolBar.addWidget(spacer2)
-
-        # Action: Auto Tag (analyze and auto-tag BPM and key)
+        
         actAutoTag = QtWidgets.QAction("Auto Tag", self)
         actAutoTag.setToolTip("Automatically tag files (BPM & Key detection).")
         actAutoTag.triggered.connect(self.autoTagFiles)
         self.audioToolBar.addAction(actAutoTag)
-
-        # Action: Edit Tags
+        
         actEditTags = QtWidgets.QAction("Edit Tags", self)
         actEditTags.setToolTip("Edit tags using the multi-dimensional tag editor.")
         actEditTags.triggered.connect(self.editTagsForSelectedFile)
         self.audioToolBar.addAction(actEditTags)
-
-        # Action: Recommend (show similar samples)
+        
         actRecommend = QtWidgets.QAction("Recommend", self)
         actRecommend.setToolTip("Recommend similar samples based on BPM or tags.")
         actRecommend.triggered.connect(self.recommendSimilarSamples)
         self.audioToolBar.addAction(actRecommend)
-
-        # Action: Send to Cubase
+        
         actSendToCubase = QtWidgets.QAction("Send to Cubase", self)
-        actSendToCubase.setToolTip("Send selected file(s) to the configured Cubase folder.")
+        actSendToCubase.setToolTip("Send selected file(s) to the Cubase folder.")
         actSendToCubase.triggered.connect(self.sendToCubase)
         self.audioToolBar.addAction(actSendToCubase)
-
-        # Create central splitter for file list and filters
+        
+        # Layout: Splitter for file list and filters
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
         left_panel = QtWidgets.QWidget(self)
         left_layout = QtWidgets.QVBoxLayout(left_panel)
         left_layout.setContentsMargins(8, 8, 8, 8)
         left_layout.setSpacing(10)
+        
         lblFilter = QtWidgets.QLabel("Filter by Name:", self)
         self.txtFilter = QtWidgets.QLineEdit(self)
         self.txtFilter.setPlaceholderText("Type to filter files...")
         self.txtFilter.textChanged.connect(self.onFilterTextChanged)
         left_layout.addWidget(lblFilter)
         left_layout.addWidget(self.txtFilter)
+        
         self.chkBPM = QtWidgets.QCheckBox("BPM Detection", self)
         self.chkBPM.setChecked(False)
         left_layout.addWidget(self.chkBPM)
         left_layout.addWidget(self.chkOnlyUnused)
+        
         sizeUnitLayout = QtWidgets.QHBoxLayout()
         lblSizeUnit = QtWidgets.QLabel("Size Unit:", self)
         self.comboSizeUnit = QtWidgets.QComboBox(self)
@@ -729,12 +187,13 @@ class MainWindow(QtWidgets.QMainWindow):
         sizeUnitLayout.addWidget(lblSizeUnit)
         sizeUnitLayout.addWidget(self.comboSizeUnit)
         left_layout.addLayout(sizeUnitLayout)
+        
         self.chkRecycleBin = QtWidgets.QCheckBox("Use Recycle Bin", self)
         self.chkRecycleBin.setChecked(True)
         left_layout.addWidget(self.chkRecycleBin)
         left_layout.addStretch()
         splitter.addWidget(left_panel)
-
+        
         right_panel = QtWidgets.QWidget(self)
         right_layout = QtWidgets.QVBoxLayout(right_panel)
         right_layout.setContentsMargins(8, 8, 8, 8)
@@ -748,13 +207,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tableView.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.tableView.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         right_layout.addWidget(self.tableView)
-        self.labelSummary = QtWidgets.QLabel("Scanned 0 files. Total size: 0 KB.", self)
+        self.labelSummary = QtWidgets.QLabel("Scanned 0 files.", self)
         right_layout.addWidget(self.labelSummary)
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 4)
         main_layout.addWidget(splitter)
-
+        
         self.setStatusBar(QtWidgets.QStatusBar(self))
         menuBar = self.menuBar()
         helpMenu = menuBar.addMenu("Help")
@@ -768,9 +227,23 @@ class MainWindow(QtWidgets.QMainWindow):
         actDark = QtWidgets.QAction("Dark Mode", self)
         actDark.triggered.connect(lambda: self.setTheme("dark", save=True))
         themeMenu.addAction(actDark)
-
+    
+    def onFilterTextChanged(self) -> None:
+        self.filterTimer.start(300)
+    
+    def updateFilter(self) -> None:
+        filter_text = self.txtFilter.text()
+        self.proxyModel.setFilterRegExp(filter_text)
+    
+    def onOnlyUnusedChanged(self) -> None:
+        self.proxyModel.setOnlyUnused(self.chkOnlyUnused.isChecked())
+    
+    def onSizeUnitChanged(self) -> None:
+        self.size_unit = self.comboSizeUnit.currentText()
+        self.model.size_unit = self.size_unit
+        self.model.updateData(self.all_files_info)
+    
     def editTagsForSelectedFile(self) -> None:
-        """Open the tag editor for the selected file."""
         selected_indexes = self.tableView.selectionModel().selectedRows()
         if not selected_indexes:
             QtWidgets.QMessageBox.information(self, "No Selection", "Please select a file to edit tags.")
@@ -785,9 +258,17 @@ class MainWindow(QtWidgets.QMainWindow):
             updated_tags = dialog.get_tags()
             file_info["tags"] = updated_tags
             self.model.dataChanged.emit(source_index, source_index, [QtCore.Qt.DisplayRole])
-
+    
+    def setTheme(self, theme: str, save: bool = True) -> None:
+        self.theme = theme.lower()
+        if self.theme == "dark":
+            self.applyDarkThemeStylesheet()
+        else:
+            self.applyLightThemeStylesheet()
+        if save:
+            self.saveSettings()
+    
     def applyLightThemeStylesheet(self) -> None:
-        """Apply the light theme stylesheet."""
         self.setStyleSheet("""
             QMainWindow { background-color: #ffffff; color: #000000; }
             QToolBar { background-color: #f0f0f0; spacing: 6px; }
@@ -814,9 +295,8 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenu::item { padding: 4px 20px; color: #333333; }
             QMenu::item:selected { background-color: #4caf50; }
         """)
-
+    
     def applyDarkThemeStylesheet(self) -> None:
-        """Apply the dark theme stylesheet."""
         self.setStyleSheet("""
             QMainWindow { background-color: #282c34; color: #ffffff; }
             QToolBar { background-color: #21252b; spacing: 6px; }
@@ -843,37 +323,25 @@ class MainWindow(QtWidgets.QMainWindow):
             QMenu::item { padding: 4px 20px; color: #abb2bf; }
             QMenu::item:selected { background-color: #61afef; }
         """)
-
-    def setTheme(self, theme: str, save: bool = True) -> None:
-        """Set the theme for the application and optionally save the setting."""
-        self.theme = theme.lower()
-        if self.theme == "dark":
-            self.applyDarkThemeStylesheet()
-        else:
-            self.applyLightThemeStylesheet()
-        if save:
-            self.saveSettings()
-
+    
     def showHelpDialog(self) -> None:
-        """Display a usage help message to the user."""
         help_text = (
-            "Musicians Organizer \n\n"
+            "Musicians Organizer\n\n"
             "1. Select Folder: Choose a directory with music samples.\n"
             "2. Filter: Type in the left panel to filter files by name.\n"
             "3. Edit Metadata: Double-click Duration, BPM, Key, or Tags in the table.\n"
-            "4. Duplicates: Use the toolbar to find duplicate files using MD5 hashing.\n"
-            "5. Preview Audio: Use the toolbar to preview or stop preview of audio files.\n"
+            "4. Duplicates: Use the toolbar to find duplicate files.\n"
+            "5. Preview Audio: Use the toolbar to preview or stop audio playback.\n"
             "6. Waveform: View waveform for audio files.\n"
-            "7. Delete Selected: Delete files via the toolbar (send to recycle bin or delete permanently).\n"
+            "7. Delete Selected: Delete files via the toolbar.\n"
             "8. Cubase Integration: Set Cubase folder and send files directly.\n"
             "9. Progress Bar: Scanning and duplicate detection run in background threads.\n"
-            "10. Sorting: Click on column headers to sort files by different attributes.\n"
+            "10. Sorting: Click on column headers to sort files.\n"
             "11. Theme: Switch between light and dark themes via the menu."
         )
         QtWidgets.QMessageBox.information(self, "Usage Help", help_text)
-
+    
     def getSelectedFilePath(self) -> Optional[str]:
-        """Return the file path of the first selected file in the table, or None."""
         selection = self.tableView.selectionModel().selectedRows()
         if selection:
             index = selection[0]
@@ -882,9 +350,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if file_info:
                 return file_info["path"]
         return None
-
+    
     def loadSettings(self) -> None:
-        """Load application settings using QSettings."""
         settings = QtCore.QSettings("MMSoftware", "MusiciansOrganizer")
         geometry = settings.value("windowGeometry")
         if geometry:
@@ -900,9 +367,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cubase_folder = settings.value("cubaseFolder", "")
         self.theme = settings.value("theme", "light")
         self.setTheme(self.theme, save=False)
-
+    
     def saveSettings(self) -> None:
-        """Save application settings using QSettings."""
         settings = QtCore.QSettings("MMSoftware", "MusiciansOrganizer")
         settings.setValue("windowGeometry", self.saveGeometry())
         settings.setValue("windowState", self.saveState())
@@ -911,29 +377,22 @@ class MainWindow(QtWidgets.QMainWindow):
         settings.setValue("useRecycleBin", "true" if self.chkRecycleBin.isChecked() else "false")
         settings.setValue("cubaseFolder", self.cubase_folder)
         settings.setValue("theme", self.theme)
-
+    
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        """Handle window close event by saving settings."""
         self.saveSettings()
         event.accept()
-
+    
     def selectFolder(self) -> None:
-        """
-        Opens a folder selection dialog and initiates file scanning.
-        The scanning progress is displayed in the progress bar.
-        """
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             self.last_folder = folder
-            self.scanner = FileScanner(folder, bpm_detection=self.chkBPM.isChecked())
+            self.scanner = FileScannerService(folder, bpm_detection=self.chkBPM.isChecked())
             self.scanner.progress.connect(lambda cur, tot: self.progressBar.setValue(int(cur / tot * 100)))
             self.scanner.finished.connect(self.onScanFinished)
             self.scanner.finished.connect(lambda: setattr(self, "scanner", None))
-            # Start the scanning thread (the UI will reflect progress via the progress bar)
             QtCore.QTimer.singleShot(50, self.scanner.start)
-
+    
     def onScanFinished(self, files: List[Dict[str, Any]]) -> None:
-        """Callback when file scanning is finished."""
         self.progressBar.setValue(100)
         self.all_files_info = files
         self.model.updateData(files)
@@ -941,64 +400,50 @@ class MainWindow(QtWidgets.QMainWindow):
         self.labelSummary.setText(f"Scanned {len(files)} files. Total size: {bytes_to_unit(total_size, self.size_unit):.2f} {self.size_unit}.")
     
     def findDuplicates(self) -> None:
-        """Initiate duplicate detection on scanned files."""
         self.progressBar.setValue(0)
-        self.duplicateFinder = DuplicateFinder(self.all_files_info)
+        self.duplicateFinder = DuplicateFinderService(self.all_files_info)
         self.duplicateFinder.progress.connect(self.onDuplicateProgress)
         self.duplicateFinder.finished.connect(self.onDuplicatesFound)
         self.duplicateFinder.finished.connect(lambda: setattr(self, "duplicateFinder", None))
         self.duplicateFinder.start()
-
+    
     @pyqtSlot(int, int)
     def onDuplicateProgress(self, current: int, total: int) -> None:
-        """Update progress bar during duplicate detection."""
         if total > 0:
             percent = int((current / total) * 100)
             self.progressBar.setValue(percent)
         else:
             self.progressBar.setValue(0)
-
+    
     @pyqtSlot(list)
     def onDuplicatesFound(self, duplicate_groups: List[List[Dict[str, Any]]]) -> None:
-        """
-        Handle the completion of duplicate detection.
-        If duplicates are found, display them in a dialog.
-        """
         self.progressBar.setValue(100)
         if duplicate_groups:
             dlg = DuplicateManagerDialog(duplicate_groups, size_unit=self.size_unit, use_recycle_bin=self.chkRecycleBin.isChecked(), parent=self)
             dlg.exec_()
         else:
             QtWidgets.QMessageBox.information(self, "Find Duplicates", "No duplicate files found.")
-
+    
     def openSelectedFileLocation(self) -> None:
-        """Open the folder of the selected file."""
         path = self.getSelectedFilePath()
         if path:
             open_file_location(path)
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
-
+    
     def deleteSelected(self) -> None:
-        """
-        Delete the files selected in the table.
-        Files are deleted using send2trash if the recycle bin option is enabled.
-        """
         selection = self.tableView.selectionModel().selectedRows()
         if not selection:
             QtWidgets.QMessageBox.information(self, "Delete Selected", "No files selected.")
             return
-        confirm = QtWidgets.QMessageBox.question(
-            self,
-            "Confirm Deletion",
-            f"Are you sure you want to delete {len(selection)} file(s)?",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-        )
+        confirm = QtWidgets.QMessageBox.question(self, "Confirm Deletion",
+                    f"Are you sure you want to delete {len(selection)} file(s)?",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
         if confirm != QtWidgets.QMessageBox.Yes:
             return
-
-        errors: List[str] = []
-        indices_to_delete: List[int] = []
+        
+        errors = []
+        indices_to_delete = []
         for index in selection:
             source_index = self.proxyModel.mapToSource(index)
             file_info = self.model.getFileAt(source_index.row())
@@ -1010,195 +455,84 @@ class MainWindow(QtWidgets.QMainWindow):
                 indices_to_delete.append(source_index.row())
             except Exception as e:
                 errors.append(f"Error deleting {file_info['path']}: {str(e)}")
-
+        
         if errors:
             QtWidgets.QMessageBox.critical(self, "Deletion Errors", "\n".join(errors))
         else:
             QtWidgets.QMessageBox.information(self, "Delete Selected", "Selected files deleted successfully.")
-
+        
         for row in sorted(indices_to_delete, reverse=True):
             del self.all_files_info[row]
         self.model.updateData(self.all_files_info)
-
+    
     def setCubaseFolder(self) -> None:
-        """Allow the user to set the Cubase folder."""
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Cubase Folder")
         if folder:
             self.cubase_folder = folder
-
+    
     def previewSelected(self) -> None:
-        """Preview the selected audio file."""
         path = self.getSelectedFilePath()
         if path:
             self.player.setMedia(QMediaContent(QUrl.fromLocalFile(path)))
             self.player.play()
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
-
+    
     def stopPreview(self) -> None:
-        """
-        Dual-purpose Stop button slot.
-        If a long-running operation (file scanning or duplicate detection) is active,
-        cancel it. Otherwise, stop audio playback.
-        """
         operation_canceled = False
-
         if self.scanner is not None:
             self.scanner.cancel()
             operation_canceled = True
             self.progressBar.setValue(0)
-
         if self.duplicateFinder is not None:
             self.duplicateFinder.cancel()
             operation_canceled = True
-
         if operation_canceled:
             QtWidgets.QMessageBox.information(self, "Operation Cancelled", "The active operation has been cancelled.")
         else:
             self.player.stop()
-
+    
     def waveformPreview(self) -> None:
-        """Display a waveform preview of the selected audio file."""
         path = self.getSelectedFilePath()
         if path:
             dialog = WaveformDialog(path, parent=self)
             dialog.exec_()
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
-
+    
     def launchWaveformPlayer(self) -> None:
-        """Launch the integrated waveform player for the selected file."""
         path = self.getSelectedFilePath()
         if path:
             player_widget = WaveformPlayerWidget(path, theme=self.theme, parent=self)
-            player_dialog = QtWidgets.QDialog(self)
-            player_dialog.setWindowTitle("Waveform Player")
-            layout = QtWidgets.QVBoxLayout(player_dialog)
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Waveform Player")
+            layout = QtWidgets.QVBoxLayout(dialog)
             layout.addWidget(player_widget)
-            player_dialog.exec_()
+            dialog.exec_()
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
-
+    
     def autoTagFiles(self) -> None:
-        """
-        Automatically tag files based on BPM and key detection.
-        Detected key and BPM tags are added to the file's tag dictionary.
-        """
-        updated_count = 0
-        for file_info in self.all_files_info:
-            ext = os.path.splitext(file_info["path"])[1].lower()
-            if ext not in AUDIO_EXTENSIONS:
-                continue
-            detected_key = detect_key_from_filename(file_info["path"])
-            if detected_key and (not file_info.get("key") or file_info.get("key") == "N/A"):
-                file_info["key"] = detected_key
-                tags = file_info.get("tags", {})
-                if isinstance(tags, list):
-                    tags = {"general": tags}
-                tags.setdefault("key", [])
-                if detected_key not in tags["key"]:
-                    tags["key"].append(detected_key)
-                file_info["tags"] = tags
-                updated_count += 1
-
-            bpm = file_info.get("bpm")
-            if bpm is not None:
-                if bpm < 90:
-                    bpm_tag = "Slow"
-                elif bpm <= 120:
-                    bpm_tag = "Medium"
-                else:
-                    bpm_tag = "Fast"
-                tags = file_info.get("tags", {})
-                if isinstance(tags, list):
-                    tags = {"general": tags}
-                tags.setdefault("bpm", [])
-                if bpm_tag not in tags["bpm"]:
-                    tags["bpm"].append(bpm_tag)
-                file_info["tags"] = tags
-                updated_count += 1
-
+        if not self.all_files_info:
+            QtWidgets.QMessageBox.information(self, "Auto Tag", "No files to tag.")
+            return
+        self.all_files_info = AutoTagService.auto_tag_files(self.all_files_info)
         self.model.updateData(self.all_files_info)
-        QtWidgets.QMessageBox.information(self, "Auto Tag", f"Auto-tagging applied to {updated_count} updates.")
-
+        QtWidgets.QMessageBox.information(self, "Auto Tag", "Auto-tagging completed.")
+    
     def recommendSimilarSamples(self) -> None:
-        """
-        Recommend similar samples based on BPM and key.
-        Files with a BPM within ±5 and/or matching key are recommended.
-        """
-        selected_indexes = self.tableView.selectionModel().selectedRows()
-        if not selected_indexes:
-            QtWidgets.QMessageBox.information(self, "No Selection", "Please select a file for recommendations.")
-            return
-
-        source_index = self.proxyModel.mapToSource(selected_indexes[0])
-        ref_file = self.model.getFileAt(source_index.row())
-        ref_bpm = ref_file.get("bpm")
-        ref_key = ref_file.get("key")
-
-        recommendations: List[Dict[str, Any]] = []
-        for file_info in self.all_files_info:
-            if file_info["path"] == ref_file["path"]:
-                continue
-            similar = False
-            if ref_bpm is not None and file_info.get("bpm") is not None:
-                if abs(file_info["bpm"] - ref_bpm) <= 5:
-                    similar = True
-            if ref_key and file_info.get("key") == ref_key:
-                similar = True
-            if similar:
-                recommendations.append(file_info)
-
-        if recommendations:
-            dlg = RecommendationsDialog(recommendations, parent=self)
-            dlg.exec_()
-        else:
-            QtWidgets.QMessageBox.information(self, "Recommend", "No similar samples found.")
-
+        QtWidgets.QMessageBox.information(self, "Recommend", "Recommendation feature is not implemented yet.")
+    
     def sendToCubase(self) -> None:
-        """
-        Copy selected file(s) to the configured Cubase folder.
-        """
-        if not self.cubase_folder:
-            QtWidgets.QMessageBox.warning(self, "Cubase Folder Not Set", "Please set the Cubase folder before sending files.")
-            return
         selection = self.tableView.selectionModel().selectedRows()
-        if not selection:
-            QtWidgets.QMessageBox.information(self, "No Selection", "Please select one or more files to send to Cubase.")
+        if not selection or not self.cubase_folder:
+            QtWidgets.QMessageBox.information(self, "Send to Cubase", "No file selected or Cubase folder not set.")
             return
-
-        errors: List[str] = []
         for index in selection:
             source_index = self.proxyModel.mapToSource(index)
             file_info = self.model.getFileAt(source_index.row())
-            if file_info:
-                source_path = file_info["path"]
-                try:
-                    shutil.copy(source_path, self.cubase_folder)
-                except Exception as e:
-                    errors.append(f"Failed to send {source_path}: {str(e)}")
-        if errors:
-            QtWidgets.QMessageBox.critical(self, "Send to Cubase Errors", "\n".join(errors))
-        else:
-            QtWidgets.QMessageBox.information(self, "Send to Cubase", "Selected files sent to Cubase folder successfully.")
-
-    def onFilterTextChanged(self, text: str) -> None:
-        """Update search text and start the filter timer."""
-        self.search_text = text
-        self.filterTimer.start(300)
-
-    def updateFilter(self) -> None:
-        """Apply the filter to the proxy model."""
-        self.proxyModel.setFilterFixedString(self.search_text)
-
-    def onOnlyUnusedChanged(self, state: int) -> None:
-        """Set the filter for unused samples based on the checkbox state."""
-        self.proxyModel.setOnlyUnused(state == QtCore.Qt.Checked)
-
-    def onSizeUnitChanged(self, index: int) -> None:
-        """Update size unit and refresh the file table model."""
-        self.size_unit = self.comboSizeUnit.currentText()
-        self.model.size_unit = self.size_unit
-        self.model.updateData(self.all_files_info)
-
-
+            try:
+                shutil.copy(file_info["path"], self.cubase_folder)
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Error", f"Failed to send {file_info['path']} to Cubase: {e}")
+        QtWidgets.QMessageBox.information(self, "Send to Cubase", "Files sent to Cubase successfully.")

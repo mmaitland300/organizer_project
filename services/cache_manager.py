@@ -1,40 +1,50 @@
-# Required Imports
+"""
+CacheManager – a simple JSON-based cache for storing file metadata and hashes.
+
+This module helps avoid reprocessing files that have not changed.
+"""
+
 import os
 import json
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class CacheManager:
-    """JSON-based cache manager for file metadata and hash values."""
     CACHE_FILE = os.path.expanduser("~/.musicians_organizer_cache.json")
     _lock = threading.Lock()
-
-    def __init__(self):
+    
+    def __init__(self) -> None:
         self.cache = {}
         self._load_cache()
-
-    def _load_cache(self):
+    
+    def _load_cache(self) -> None:
         if os.path.exists(self.CACHE_FILE):
             try:
                 with open(self.CACHE_FILE, "r") as f:
                     self.cache = json.load(f)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Failed loading cache: {e}")
                 self.cache = {}
-
-    def save_cache(self):
+    
+    def save_cache(self) -> None:
         with self._lock:
-            with open(self.CACHE_FILE, "w") as f:
-                json.dump(self.cache, f, indent=2)
-
+            try:
+                with open(self.CACHE_FILE, "w") as f:
+                    json.dump(self.cache, f, indent=2)
+            except Exception as e:
+                logger.error(f"Failed saving cache: {e}")
+    
     def get(self, file_path: str, mod_time: float, size: int) -> dict:
-        """Return cached data if file attributes match, else an empty dict."""
         key = os.path.abspath(file_path)
         entry = self.cache.get(key)
         if entry and entry.get("mod_time") == mod_time and entry.get("size") == size:
             return entry.get("data", {})
         return {}
-
-    def update(self, file_path: str, mod_time: float, size: int, data: dict):
-        """Update cache for the given file."""
+    
+    def update(self, file_path: str, mod_time: float, size: int, data: dict) -> None:
         key = os.path.abspath(file_path)
         with self._lock:
             self.cache[key] = {

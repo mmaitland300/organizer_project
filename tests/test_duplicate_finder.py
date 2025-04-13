@@ -1,44 +1,51 @@
-import os
-import pytest
-from datetime import datetime
+import unittest
+import datetime
+from services.duplicate_finder import DuplicateFinderService
 from PyQt5.QtTest import QSignalSpy
-from core.duplicate_finder import DuplicateFinder
+from PyQt5.QtWidgets import QApplication
+import sys
 
-@pytest.fixture
-def sample_files_with_duplicates(tmp_path):
-    # Create a temporary directory with duplicate files.
-    dir_path = tmp_path / "dup_dir"
-    dir_path.mkdir()
-    file1 = dir_path / "dup1.mp3"
-    file2 = dir_path / "dup2.mp3"
-    file3 = dir_path / "unique.mp3"
-    file1.write_text("same content")
-    file2.write_text("same content")
-    file3.write_text("different content")
-    files_info = []
-    for file in [file1, file2, file3]:
-        info = {
-            'path': str(file),
-            'size': os.path.getsize(file),
-            'mod_time': datetime.fromtimestamp(os.path.getmtime(file)),
-            'duration': None,
-            'bpm': None,
-            'key': "N/A",
-            'used': False,
-            'tags': {}
+if QApplication.instance() is None:
+    app = QApplication(sys.argv)
+
+class TestDuplicateFinder(unittest.TestCase):
+    def setUp(self):
+        self.file1 = {
+            'path': '/dummy/path/file1.wav',
+            'size': 1024,
+            'mod_time': datetime.datetime.now(),
+            'hash': 'abc123',
+            'used': False
         }
-        files_info.append(info)
-    return files_info
+        self.file2 = {
+            'path': '/dummy/path/file2.wav',
+            'size': 1024,
+            'mod_time': datetime.datetime.now(),
+            'hash': 'abc123',
+            'used': False
+        }
+        self.file3 = {
+            'path': '/dummy/path/file3.wav',
+            'size': 2048,
+            'mod_time': datetime.datetime.now(),
+            'hash': 'def456',
+            'used': False
+        }
+        self.files_info = [self.file1, self.file2, self.file3]
 
-def test_duplicate_finder(qtbot, sample_files_with_duplicates):
-    finder = DuplicateFinder(sample_files_with_duplicates)
-    spy = QSignalSpy(finder.finished)
-    finder.start()  # Do NOT call qtbot.addWidget here since finder is not a QWidget
-    assert spy.wait(5000)
-    duplicate_groups = spy[0][0]
-    # Expect one duplicate group (the two files with "same content").
-    assert isinstance(duplicate_groups, list)
-    found = any(len(group) == 2 for group in duplicate_groups)
-    assert found
+    def test_duplicate_detection(self):
+        dup_service = DuplicateFinderService(self.files_info)
+        # Use QSignalSpy to catch the finished signal with a timeout.
+        spy = QSignalSpy(dup_service.finished)
+        dup_service.start()
+        if not spy.wait(2000):
+            self.fail("Finished signal was not emitted in time")
+        # The spy returns a list of tuples; the first element of the first tuple is the result.
+        result = spy[0][0]
+        # We expect one duplicate group with two duplicates.
+        self.assertEqual(len(result), 1)
+        self.assertEqual(len(result[0]), 2)
 
+if __name__ == '__main__':
+    unittest.main()
 

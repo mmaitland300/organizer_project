@@ -1,54 +1,57 @@
-# File: core/duplicate_finder.py
+"""
+DuplicateFinderService – a background service for finding duplicate files.
+
+It groups files by size and then by an MD5 hash (computed with timeout and file size limits).
+"""
 
 import os
-from PyQt5 import QtCore
+import logging
 from typing import List, Dict, Any, Optional
+from PyQt5 import QtCore
 from utils.helpers import compute_hash
 
-class DuplicateFinder(QtCore.QThread):
-    """
-    QThread to find duplicates among a list of file info dictionaries.
-    Emits progress signals so that the UI can remain responsive.
-    """
-    progress = QtCore.pyqtSignal(int, int)       # (current, total)
-    finished = QtCore.pyqtSignal(list)           # emits duplicate_groups list
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
+class DuplicateFinderService(QtCore.QThread):
+    """
+    Finds duplicate files using file size grouping and MD5 hashing.
+
+    Emits:
+      - progress(current, total): progress of the hashing operation
+      - finished(duplicate_groups): list of duplicate file groups
+    """
+    progress = QtCore.pyqtSignal(int, int)
+    finished = QtCore.pyqtSignal(list)
+    
     def __init__(self, files_info: List[Dict[str, Any]], parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
         self.files_info = files_info
         self._cancelled = False
-
-    def run(self):
-        """
-        Locate duplicate files by size, then by hash, emitting progress signals.
-        Finally emit finished with the duplicate groups.
-        """
-        # 1) Group files by size
+        
+    def run(self) -> None:
         size_dict = {}
         for file_info in self.files_info:
-            size = file_info['size']
+            size = file_info.get('size')
             size_dict.setdefault(size, []).append(file_info)
-
-        # Track progress across all files we process in hashing
-        # Count how many files we will potentially hash
+        
         total_for_progress = len(self.files_info)
         current_count = 0
         duplicate_groups = []
         
-        # 2) For each group with more than 1 file, group by MD5
         for group in size_dict.values():
             if self._cancelled:
-                self.finished.emit([]) 
+                self.finished.emit([])
                 return
             if len(group) > 1:
                 hash_dict = {}
                 for fi in group:
                     if self._cancelled:
-                        self.finished.emit([])  # Early return if cancelled.
+                        self.finished.emit([])
                         return
                     if 'hash' not in fi or fi['hash'] is None:
                         fi['hash'] = compute_hash(fi['path'])
-                    h = fi['hash']
+                    h = fi.get('hash')
                     if h:
                         hash_dict.setdefault(h, []).append(fi)
                     current_count += 1
@@ -58,11 +61,11 @@ class DuplicateFinder(QtCore.QThread):
                     if len(hash_group) > 1:
                         duplicate_groups.append(hash_group)
             else:
-                # small optimization if group size=1 we do no hashing
                 current_count += len(group)
                 self.progress.emit(current_count, total_for_progress)
         self.finished.emit(duplicate_groups)
-
-    def cancel(self):
-        """Set cancellation flag for duplicate detection."""
+    
+    def cancel(self) -> None:
+        """Cancel duplicate detection."""
         self._cancelled = True
+        logger.info("Duplicate detection cancelled.")
