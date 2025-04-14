@@ -150,6 +150,12 @@ class MainWindow(QtWidgets.QMainWindow):
         actEditTags.setToolTip("Edit tags using the multi-dimensional tag editor.")
         actEditTags.triggered.connect(self.editTagsForSelectedFile)
         self.audioToolBar.addAction(actEditTags)
+
+        # New "Analyze Library" action:
+        actAnalyzeLibrary = QtWidgets.QAction("Analyze Library", self)
+        actAnalyzeLibrary.setToolTip("Perform advanced audio analysis on the library (e.g., brightness, loudness, stereo width, and BPM as tag dimensions).")
+        actAnalyzeLibrary.triggered.connect(self.runAdvancedAnalysis)
+        self.audioToolBar.addAction(actAnalyzeLibrary)
         
         actRecommend = QtWidgets.QAction("Recommend", self)
         actRecommend.setToolTip("Recommend similar samples based on BPM or tags.")
@@ -396,7 +402,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 folder, 
                 bpm_detection=self.chkBPM.isChecked()
             )
-            self.scanner.progress.connect(lambda cur, tot: self.progressBar.setValue(int(cur / tot * 100)))
+            self.scanner.progress.connect(lambda cur, tot: self.progressBar.setValue(int((cur / tot * 100) if tot > 0 else 0)))
             self.scanner.finished.connect(self.onScanFinished)
             self.scanner.finished.connect(lambda: setattr(self, "scanner", None))
             QtCore.QTimer.singleShot(50, self.scanner.start)
@@ -572,3 +578,35 @@ class MainWindow(QtWidgets.QMainWindow):
             f"Scanned {len(self.all_files_info)} files. "
             f"Total size: {converted_size:.2f} {self.size_unit} (approx)."
         )
+
+    def runAdvancedAnalysis(self) -> None:
+        # Use the currently selected folder (which you stored in self.last_folder)
+        if not self.last_folder:
+            QtWidgets.QMessageBox.information(self, "Analyze Library", "No folder selected for analysis.")
+            return
+
+        # Retrieve only files from the selected folder
+        files = DatabaseManager.instance().get_files_in_folder(self.last_folder)
+        if not files:
+            QtWidgets.QMessageBox.information(self, "Analyze Library", "No files available for analysis in the selected folder.")
+            return
+
+        self.statusBar().showMessage("Running advanced analysis...")
+        from services.advanced_analysis_worker import AdvancedAnalysisWorker
+        self.advWorker = AdvancedAnalysisWorker(files)
+        self.advWorker.progress.connect(self.onAdvancedAnalysisProgress)
+        self.advWorker.finished.connect(self.onAdvancedAnalysisFinished)
+        self.advWorker.start()
+
+
+    def onAdvancedAnalysisProgress(self, current: int, total: int) -> None:
+        self.progressBar.setValue(int(current / total * 100))
+        self.statusBar().showMessage(f"Advanced analysis: {current} of {total} files processed.")
+
+    def onAdvancedAnalysisFinished(self, updated_files: List[Dict[str, Any]]) -> None:
+        self.progressBar.setValue(100)
+        self.all_files_info = updated_files
+        self.model.updateData(updated_files)
+        self.statusBar().showMessage("Advanced analysis complete.", 5000)
+        QtWidgets.QMessageBox.information(self, "Analyze Library", "Advanced analysis has been completed.")
+
