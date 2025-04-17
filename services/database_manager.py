@@ -14,7 +14,6 @@ class DatabaseManager:
 
     _instance = None
     DB_FILENAME = os.path.expanduser("~/.musicians_organizer.db")
-
     @classmethod
     def instance(cls) -> "DatabaseManager":
         """
@@ -38,7 +37,7 @@ class DatabaseManager:
         Establish the SQLite connection.
         """
         try:
-            # Add check_same_thread=False
+            # Add check_same_thread=False so we can access from multiple threads
             self.connection = sqlite3.connect(
                 self.DB_FILENAME,
                 check_same_thread=False
@@ -59,6 +58,9 @@ class DatabaseManager:
             logger.error("No database connection. Cannot create schema.")
             return
 
+        # We no longer alter the table to add brightness, loudness_rms, stereo_width
+        # because we want those metrics to live in the JSON 'tags' column, not separate columns.
+
         create_files_table = """
         CREATE TABLE IF NOT EXISTS files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,10 +73,11 @@ class DatabaseManager:
             used INTEGER DEFAULT 0,
             samplerate INTEGER,
             channels INTEGER,
-            tags TEXT,  -- We'll store multi-dim tags as JSON or a simple string for now
+            tags TEXT,
             last_scanned TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
+
         try:
             with self.connection:
                 self.connection.execute(create_files_table)
@@ -92,17 +95,23 @@ class DatabaseManager:
             return
 
         try:
-            # Convert 'used' from bool to int (1 or 0)
             used_val = 1 if file_info.get("used", False) else 0
-            # Convert tags dict/list to string. Could be JSON if you prefer.
             import json
             tags_text = ""
             if "tags" in file_info:
                 tags_text = json.dumps(file_info["tags"])
-            with self._lock:  # <-- Acquire lock before querying
+
+            with self._lock:
+                # We removed brightness/loudness_rms/stereo_width from the SQL
                 sql = """
-                INSERT INTO files (file_path, size, mod_time, duration, bpm, file_key, used, samplerate, channels, tags)
-                VALUES (:file_path, :size, :mod_time, :duration, :bpm, :file_key, :used, :samplerate, :channels, :tags)
+                INSERT INTO files (
+                    file_path, size, mod_time, duration, bpm, file_key, used,
+                    samplerate, channels, tags
+                )
+                VALUES (
+                    :file_path, :size, :mod_time, :duration, :bpm, :file_key, :used,
+                    :samplerate, :channels, :tags
+                )
                 ON CONFLICT(file_path) DO UPDATE SET
                     size=excluded.size,
                     mod_time=excluded.mod_time,
@@ -119,7 +128,7 @@ class DatabaseManager:
                 params = {
                     "file_path": file_info.get("path"),
                     "size": file_info.get("size"),
-                    "mod_time": file_info.get("mod_time").timestamp() if file_info.get("mod_time") else None,
+                    "mod_time": file_info["mod_time"].timestamp() if file_info.get("mod_time") else None,
                     "duration": file_info.get("duration"),
                     "bpm": file_info.get("bpm"),
                     "file_key": file_info.get("key"),
@@ -128,8 +137,10 @@ class DatabaseManager:
                     "channels": file_info.get("channels"),
                     "tags": tags_text
                 }
+
                 with self.connection:
                     self.connection.execute(sql, params)
+
         except Exception as e:
             logger.error(f"Failed to save file record for {file_info.get('path')}: {e}", exc_info=True)
 
@@ -141,7 +152,7 @@ class DatabaseManager:
             logger.error("No database connection. Cannot get file record.")
             return None
         try:
-            with self._lock:  # <-- Acquire lock before querying
+            with self._lock:
                 sql = "SELECT * FROM files WHERE file_path = ?"
                 cur = self.connection.cursor()
                 cur.execute(sql, (file_path,))
@@ -189,49 +200,55 @@ class DatabaseManager:
     def _row_to_dict(self, row: tuple) -> Dict[str, Any]:
         """
         Convert a DB row tuple to a dictionary matching file_info structure.
+        All advanced DSP fields (brightness, loudness, etc.) 
+        are assumed to be stored within 'tags' JSON, not in separate columns.
         """
-        # The order of columns: 
-        # 0    id
-        # 1    file_path
-        # 2    size
-        # 3    mod_time
-        # 4    duration
-        # 5    bpm
-        # 6    file_key
-        # 7    used
-        # 8    samplerate
-        # 9    channels
-        # 10   tags
-        # 11   last_scanned
-        import json
-        (row_id, path, size, mod_time, duration, bpm, key, used, samplerate, channels, tags, last_scanned) = row
-
-        tags_data = {}
-        if tags:
-            try:
-                tags_data = json.loads(tags)
-            except:
-                pass  # ignore parse errors
-
-        # Convert from timestamp to datetime if mod_time is present
         import datetime
-        mod_time_dt = None
-        if mod_time:
-            mod_time_dt = datetime.datetime.fromtimestamp(mod_time)
+        import json
 
-        return {
+        (
+            row_id,
+            file_path,
+            size,
+            mod_time_ts,      # float (timestamp) or None
+            duration,
+            bpm,
+            file_key,
+            used,             # 0 or 1
+            samplerate,
+            channels,
+            tags_text,        # JSON for all multi-dimensional tags
+            last_scanned
+        ) = row
+
+        mod_time_dt = None
+        if mod_time_ts is not None:
+            mod_time_dt = datetime.datetime.fromtimestamp(mod_time_ts)
+
+        # Parse tags JSON
+        tags_data = {}
+        if tags_text:
+            try:
+                tags_data = json.loads(tags_text)
+            except Exception:
+                pass
+
+        file_info = {
             "db_id": row_id,
-            "path": path,
+            "path": file_path,
             "size": size,
             "mod_time": mod_time_dt,
             "duration": duration,
             "bpm": bpm,
-            "key": key if key else "",
+            "key": file_key if file_key else "",
             "used": bool(used),
             "samplerate": samplerate,
             "channels": channels,
-            "tags": tags_data
+            "tags": tags_data,
+            # "last_scanned": last_scanned  # optional if you want to store it
         }
+        return file_info
+
     def delete_files_in_folder(self, folder_path: str) -> None:
         """
         Delete all files whose paths start with 'folder_path'
@@ -241,11 +258,9 @@ class DatabaseManager:
             logger.error("No database connection. Cannot delete files by folder.")
             return
 
-        # Normalize the folder path to a standard format
         folder_path = os.path.normpath(folder_path)
-
         try:
-            with self._lock:  # ensure thread-safety if using a lock
+            with self._lock:
                 sql = "DELETE FROM files WHERE file_path LIKE ? || '%'"
                 self.connection.execute(sql, (folder_path,))
                 logger.info(f"Deleted old records from folder: {folder_path}")
@@ -264,7 +279,7 @@ class DatabaseManager:
 
         folder_path = os.path.normpath(folder_path)
         try:
-            with self._lock:  # if you're using a thread lock
+            with self._lock:
                 sql = "SELECT * FROM files WHERE file_path LIKE ? || '%'"
                 cur = self.connection.cursor()
                 cur.execute(sql, (folder_path,))
