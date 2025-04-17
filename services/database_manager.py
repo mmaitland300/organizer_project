@@ -1,31 +1,32 @@
+# services/database_manager.py
+"""
+Singleton-style class to manage the application's SQLite database, with batch-write support.
+"""
 import os
 import sqlite3
 import logging
 import threading
+import json
+import datetime
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     """
-    Singleton-style class to manage the application's SQLite database.
-    Responsible for creating tables, and providing insert/update/select methods.
+    Manages SQLite database connection and provides methods to insert/update/select file records.
     """
-
     _instance = None
     DB_FILENAME = os.path.expanduser("~/.musicians_organizer.db")
+
     @classmethod
     def instance(cls) -> "DatabaseManager":
-        """
-        Get the global, singleton instance of the DatabaseManager.
-        """
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
 
     def __init__(self):
         if DatabaseManager._instance is not None:
-            # Prevent direct instantiation - enforce singleton
             return
         self._lock = threading.Lock()
         self.connection: Optional[sqlite3.Connection] = None
@@ -33,11 +34,7 @@ class DatabaseManager:
         self._create_schema()
 
     def _connect(self) -> None:
-        """
-        Establish the SQLite connection.
-        """
         try:
-            # Add check_same_thread=False so we can access from multiple threads
             self.connection = sqlite3.connect(
                 self.DB_FILENAME,
                 check_same_thread=False
@@ -50,16 +47,9 @@ class DatabaseManager:
             self.connection = None
 
     def _create_schema(self) -> None:
-        """
-        Create necessary tables if they do not already exist.
-        For now, we only need a 'files' table. Additional tables can be added later.
-        """
         if not self.connection:
             logger.error("No database connection. Cannot create schema.")
             return
-
-        # We no longer alter the table to add brightness, loudness_rms, stereo_width
-        # because we want those metrics to live in the JSON 'tags' column, not separate columns.
 
         create_files_table = """
         CREATE TABLE IF NOT EXISTS files (
@@ -77,7 +67,6 @@ class DatabaseManager:
             last_scanned TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
-
         try:
             with self.connection:
                 self.connection.execute(create_files_table)
@@ -87,62 +76,109 @@ class DatabaseManager:
 
     def save_file_record(self, file_info: Dict[str, Any]) -> None:
         """
-        Insert or update a single file record in the 'files' table.
-        file_info is expected to have the same keys we store in the DB columns.
+        Insert or update a single file record.
         """
         if not self.connection:
             logger.error("No database connection. Cannot save file record.")
             return
-
         try:
+            # Determine numeric timestamp for mod_time
+            ft = file_info.get("mod_time")
+            if isinstance(ft, datetime.datetime):
+                mod_ts = ft.timestamp()
+            else:
+                mod_ts = ft if isinstance(ft, (int, float)) else None
+
             used_val = 1 if file_info.get("used", False) else 0
-            import json
-            tags_text = ""
-            if "tags" in file_info:
-                tags_text = json.dumps(file_info["tags"])
-
-            with self._lock:
-                # We removed brightness/loudness_rms/stereo_width from the SQL
-                sql = """
-                INSERT INTO files (
-                    file_path, size, mod_time, duration, bpm, file_key, used,
-                    samplerate, channels, tags
-                )
-                VALUES (
-                    :file_path, :size, :mod_time, :duration, :bpm, :file_key, :used,
-                    :samplerate, :channels, :tags
-                )
-                ON CONFLICT(file_path) DO UPDATE SET
-                    size=excluded.size,
-                    mod_time=excluded.mod_time,
-                    duration=excluded.duration,
-                    bpm=excluded.bpm,
-                    file_key=excluded.file_key,
-                    used=excluded.used,
-                    samplerate=excluded.samplerate,
-                    channels=excluded.channels,
-                    tags=excluded.tags,
-                    last_scanned=CURRENT_TIMESTAMP
-                """
-
-                params = {
-                    "file_path": file_info.get("path"),
-                    "size": file_info.get("size"),
-                    "mod_time": file_info["mod_time"].timestamp() if file_info.get("mod_time") else None,
-                    "duration": file_info.get("duration"),
-                    "bpm": file_info.get("bpm"),
-                    "file_key": file_info.get("key"),
-                    "used": used_val,
-                    "samplerate": file_info.get("samplerate"),
-                    "channels": file_info.get("channels"),
-                    "tags": tags_text
-                }
-
-                with self.connection:
-                    self.connection.execute(sql, params)
-
+            tags_text = json.dumps(file_info.get("tags", {}))
+            sql = """
+            INSERT INTO files (
+                file_path, size, mod_time, duration, bpm, file_key, used,
+                samplerate, channels, tags
+            ) VALUES (
+                :file_path, :size, :mod_time, :duration, :bpm, :file_key, :used,
+                :samplerate, :channels, :tags
+            ) ON CONFLICT(file_path) DO UPDATE SET
+                size=excluded.size,
+                mod_time=excluded.mod_time,
+                duration=excluded.duration,
+                bpm=excluded.bpm,
+                file_key=excluded.file_key,
+                used=excluded.used,
+                samplerate=excluded.samplerate,\n                channels=excluded.channels,
+                tags=excluded.tags,
+                last_scanned=CURRENT_TIMESTAMP
+            """
+            params = {
+                "file_path": file_info.get("path"),
+                "size": file_info.get("size"),
+                "mod_time": mod_ts,
+                "duration": file_info.get("duration"),
+                "bpm": file_info.get("bpm"),
+                "file_key": file_info.get("key"),
+                "used": used_val,
+                "samplerate": file_info.get("samplerate"),
+                "channels": file_info.get("channels"),
+                "tags": tags_text
+            }
+            with self._lock, self.connection:
+                self.connection.execute(sql, params)
         except Exception as e:
             logger.error(f"Failed to save file record for {file_info.get('path')}: {e}", exc_info=True)
+
+    def save_file_records(self, file_infos: List[Dict[str, Any]]) -> None:
+        """
+        Batch insert or update multiple file records in a single transaction.
+        """
+        if not self.connection:
+            logger.error("No database connection. Cannot save file records.")
+            return
+        sql = """
+        INSERT INTO files (
+            file_path, size, mod_time, duration, bpm, file_key, used,
+            samplerate, channels, tags
+        ) VALUES (
+            :file_path, :size, :mod_time, :duration, :bpm, :file_key, :used,
+            :samplerate, :channels, :tags
+        ) ON CONFLICT(file_path) DO UPDATE SET
+            size=excluded.size,
+            mod_time=excluded.mod_time,
+            duration=excluded.duration,
+            bpm=excluded.bpm,
+            file_key=excluded.file_key,
+            used=excluded.used,
+            samplerate=excluded.samplerate,
+            channels=excluded.channels,
+            tags=excluded.tags,
+            last_scanned=CURRENT_TIMESTAMP
+        """
+        params_list = []
+        for fi in file_infos:
+            ft = fi.get("mod_time")
+            if isinstance(ft, datetime.datetime):
+                mod_ts = ft.timestamp()
+            else:
+                mod_ts = ft if isinstance(ft, (int, float)) else None
+
+            used_val = 1 if fi.get("used", False) else 0
+            tags_text = json.dumps(fi.get("tags", {}))
+            params_list.append({
+                "file_path": fi.get("path"),
+                "size": fi.get("size"),
+                "mod_time": mod_ts,
+                "duration": fi.get("duration"),
+                "bpm": fi.get("bpm"),
+                "file_key": fi.get("key"),
+                "used": used_val,
+                "samplerate": fi.get("samplerate"),
+                "channels": fi.get("channels"),
+                "tags": tags_text
+            })
+        try:
+            with self._lock, self.connection:
+                self.connection.executemany(sql, params_list)
+        except Exception as e:
+            logger.error(f"Failed batch save file records: {e}", exc_info=True)
 
     def get_file_record(self, file_path: str) -> Optional[Dict[str, Any]]:
         """
