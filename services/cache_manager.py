@@ -1,5 +1,5 @@
 """
-CacheManager – a simple JSON-based cache for storing file metadata and hashes.
+CacheManager - a simple JSON-based cache for storing file metadata and hashes.
 
 This module helps avoid reprocessing files that have not changed.
 """
@@ -15,7 +15,7 @@ logger.setLevel(logging.DEBUG)
 class CacheManager:
     CACHE_FILE = os.path.expanduser("~/.musicians_organizer_cache.json")
     _lock = threading.Lock()
-    
+
     def __init__(self) -> None:
         self.cache = {}
         self._load_cache()
@@ -46,9 +46,34 @@ class CacheManager:
     
     def update(self, file_path: str, mod_time: float, size: int, data: dict) -> None:
         key = os.path.abspath(file_path)
+        # Convert datetime in data to timestamp
+        import datetime as _dt
+        cleaned = {}
+        for k, v in data.items():
+            if isinstance(v, _dt.datetime):
+                cleaned[k] = v.timestamp()
+            else:
+                cleaned[k] = v
         with self._lock:
             self.cache[key] = {
                 "mod_time": mod_time,
                 "size": size,
-                "data": data
+                "data": cleaned
             }
+
+    def needs_update(self, file_path: str, mod_time: float, size: int) -> bool:
+        """
+        Return True if no cache entry exists for this file, or if its
+        stored mod_time or size differ from the current values.
+        """
+        key = os.path.abspath(file_path)
+        entry = self.cache.get(key)
+        return (
+            entry is None or
+            entry.get("mod_time") != mod_time or
+            entry.get("size")    != size
+        )
+
+    def flush(self) -> None:
+        """Persist any pending cache entries to disk."""
+        self.save_cache()
