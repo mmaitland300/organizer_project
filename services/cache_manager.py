@@ -41,7 +41,15 @@ class CacheManager:
         key = os.path.abspath(file_path)
         entry = self.cache.get(key)
         if entry and entry.get("mod_time") == mod_time and entry.get("size") == size:
-            return entry.get("data", {})
+            data = entry.get("data", {}).copy()
+            # Reconstruct datetime for mod_time
+            try:
+                import datetime as _dt
+                if "mod_time" in data and isinstance(data["mod_time"], (int, float)):
+                    data["mod_time"] = _dt.datetime.fromtimestamp(data["mod_time"])
+            except Exception:
+                pass
+            return data
         return {}
     
     def update(self, file_path: str, mod_time: float, size: int, data: dict) -> None:

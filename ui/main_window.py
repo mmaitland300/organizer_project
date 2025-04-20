@@ -410,18 +410,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def onScanFinished(self, files: List[Dict[str, Any]]) -> None:
         self.progressBar.setValue(100)
 
-        db = DatabaseManager.instance()
+        # Prefer scanner results; fallback to database lookup
+        if files:
+            self.all_files_info = files
+        else:
+            self.all_files_info = DatabaseManager.instance().get_files_in_folder(self.last_folder)
+        self.model.updateData(self.all_files_info)
 
-        folder_files = db.get_files_in_folder(self.last_folder)
-        
-        self.all_files_info = folder_files
-        self.model.updateData(folder_files)
-
+        # Update summary using the final file list
         from utils.helpers import bytes_to_unit
-        total_size = sum(f["size"] for f in folder_files)
+        total_size = sum(f["size"] for f in self.all_files_info)
         converted_size = bytes_to_unit(total_size, self.size_unit)
         self.labelSummary.setText(
-            f"Scanned {len(folder_files)} files. "
+            f"Scanned {len(self.all_files_info)} files. "
             f"Total size: {converted_size:.2f} {self.size_unit} (approx)."
         )
     
@@ -585,12 +586,15 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "Analyze Library", "No folder selected for analysis.")
             return
 
-        # Retrieve only files from the selected folder
+        # Retrieve files: prefer DB, fall back to most recent scan results
         files = DatabaseManager.instance().get_files_in_folder(self.last_folder)
+        if not files:
+            files = getattr(self, "all_files_info", []) or []
         if not files:
             QtWidgets.QMessageBox.information(self, "Analyze Library", "No files available for analysis in the selected folder.")
             return
 
+        # Start advanced analysis
         self.statusBar().showMessage("Running advanced analysis...")
         from services.advanced_analysis_worker import AdvancedAnalysisWorker
         self.advWorker = AdvancedAnalysisWorker(files)
