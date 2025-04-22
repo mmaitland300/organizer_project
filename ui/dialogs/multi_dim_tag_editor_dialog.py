@@ -3,10 +3,14 @@ MultiDimTagEditorDialog - a dialog for editing multi-dimensional tags.
 """
 
 from typing import Any, Dict, List, Optional
+
 from PyQt5 import QtWidgets
 
+
 class MultiDimTagEditorDialog(QtWidgets.QDialog):
-    def __init__(self, tag_data: Any, parent: Optional[QtWidgets.QWidget] = None) -> None:
+    def __init__(
+        self, tag_data: Any, parent: Optional[QtWidgets.QWidget] = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Edit Tags")
         self.resize(400, 300)
@@ -34,11 +38,13 @@ class MultiDimTagEditorDialog(QtWidgets.QDialog):
         btnAdd = QtWidgets.QPushButton("Add Tag", self)
         btnAdd.clicked.connect(self.addTag)
         main_layout.addWidget(btnAdd)
-        btnBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
+        btnBox = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self
+        )
         btnBox.accepted.connect(self.accept)
         btnBox.rejected.connect(self.reject)
         main_layout.addWidget(btnBox)
-    
+
     def loadData(self) -> None:
         self.tableWidget.setRowCount(0)
         for dimension, tags in self.tag_data.items():
@@ -49,7 +55,7 @@ class MultiDimTagEditorDialog(QtWidgets.QDialog):
                 tag_item = QtWidgets.QTableWidgetItem(tag)
                 self.tableWidget.setItem(row, 0, dim_item)
                 self.tableWidget.setItem(row, 1, tag_item)
-    
+
     def addTag(self) -> None:
         dimension = self.dimensionEdit.text().strip().lower()
         tag = self.tagEdit.text().strip().upper()
@@ -63,7 +69,7 @@ class MultiDimTagEditorDialog(QtWidgets.QDialog):
         self.tableWidget.setItem(row, 1, tag_item)
         self.dimensionEdit.clear()
         self.tagEdit.clear()
-    
+
     def get_tags(self) -> Dict[str, List[str]]:
         new_tags: Dict[str, List[str]] = {}
         for row in range(self.tableWidget.rowCount()):

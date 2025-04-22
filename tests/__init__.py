@@ -1,7 +1,8 @@
-import sys
 import os
-from PyQt5.QtWidgets import QApplication
+import sys
+
 from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QApplication
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

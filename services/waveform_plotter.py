@@ -5,10 +5,12 @@ WaveformPlotter – utility for plotting downsampled audio waveforms.
 
 import logging
 from typing import Any
+
 import librosa
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
 
 class WaveformPlotter:
     @staticmethod

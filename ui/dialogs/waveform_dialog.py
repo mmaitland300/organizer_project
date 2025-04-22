@@ -5,15 +5,19 @@ WaveformDialog - displays a waveform preview for a given audio file using Wavefo
 
 import os
 from typing import Optional
-from PyQt5 import QtWidgets
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-import matplotlib.pyplot as plt
 
-from services.waveform_plotter import WaveformPlotter
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt5 import QtWidgets
+
 from config.settings import ENABLE_WAVEFORM_PREVIEW
+from services.waveform_plotter import WaveformPlotter
+
 
 class WaveformDialog(QtWidgets.QDialog):
-    def __init__(self, file_path: str, parent: Optional[QtWidgets.QWidget] = None) -> None:
+    def __init__(
+        self, file_path: str, parent: Optional[QtWidgets.QWidget] = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Waveform Preview: {os.path.basename(file_path)}")
         self.resize(800, 400)
@@ -32,4 +36,3 @@ class WaveformDialog(QtWidgets.QDialog):
                 "Waveform preview is not available due to missing dependencies."
             )
             layout.addWidget(label)
-

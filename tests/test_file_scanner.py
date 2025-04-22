@@ -1,16 +1,19 @@
-import os
-import tempfile
 import datetime
+import os
+import sys
+import tempfile
 import unittest
-from services.file_scanner import FileScannerService
+from unittest.mock import MagicMock, patch
+
 from PyQt5.QtTest import QSignalSpy
 from PyQt5.QtWidgets import QApplication
-import sys
-from unittest.mock import patch, MagicMock
+
+from services.file_scanner import FileScannerService
 
 # Ensure a QApplication instance is available.
 if QApplication.instance() is None:
     app = QApplication(sys.argv)
+
 
 class TestFileScannerService(unittest.TestCase):
     def setUp(self):
@@ -25,8 +28,10 @@ class TestFileScannerService(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
-        
-    @unittest.skip("Temporarily skipping file scanner test due to hanging metadata extraction")
+
+    @unittest.skip(
+        "Temporarily skipping file scanner test due to hanging metadata extraction"
+    )
     def test_scan(self):
         # Create a dummy tag to be returned by TinyTag.get.
         dummy_tag = MagicMock()
@@ -35,8 +40,14 @@ class TestFileScannerService(unittest.TestCase):
         dummy_tag.channels = 2
 
         # Patch both the reference in config.settings and in services.file_scanner.
-        with patch("config.settings.TinyTag.get", return_value=dummy_tag) as mock_get_config, \
-             patch("services.file_scanner.TinyTag.get", return_value=dummy_tag) as mock_get_scanner:
+        with (
+            patch(
+                "config.settings.TinyTag.get", return_value=dummy_tag
+            ) as mock_get_config,
+            patch(
+                "services.file_scanner.TinyTag.get", return_value=dummy_tag
+            ) as mock_get_scanner,
+        ):
 
             # Use QSignalSpy to capture the finished signal.
             spy = QSignalSpy(self.scanner.finished)
@@ -46,12 +57,15 @@ class TestFileScannerService(unittest.TestCase):
             if not spy.wait(2000):
                 self.fail("Finished signal was not emitted in time")
             files_info = spy[0][0]
-            self.assertTrue(len(files_info) > 0, f"Expected non-empty file info, got: {files_info}")
+            self.assertTrue(
+                len(files_info) > 0, f"Expected non-empty file info, got: {files_info}"
+            )
             file_info = files_info[0]
             self.assertEqual(file_info.get("duration"), 100.0)
             self.assertEqual(file_info.get("samplerate"), 44100)
             self.assertEqual(file_info.get("channels"), 2)
             self.assertIn("path", file_info)
+
 
 if __name__ == "__main__":
     unittest.main()

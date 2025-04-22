@@ -1,35 +1,38 @@
-import unittest
 import datetime
-from services.duplicate_finder import DuplicateFinderService
+import sys
+import unittest
+
 from PyQt5.QtTest import QSignalSpy
 from PyQt5.QtWidgets import QApplication
-import sys
+
+from services.duplicate_finder import DuplicateFinderService
 
 if QApplication.instance() is None:
     app = QApplication(sys.argv)
 
+
 class TestDuplicateFinder(unittest.TestCase):
     def setUp(self):
         self.file1 = {
-            'path': '/dummy/path/file1.wav',
-            'size': 1024,
-            'mod_time': datetime.datetime.now(),
-            'hash': 'abc123',
-            'used': False
+            "path": "/dummy/path/file1.wav",
+            "size": 1024,
+            "mod_time": datetime.datetime.now(),
+            "hash": "abc123",
+            "used": False,
         }
         self.file2 = {
-            'path': '/dummy/path/file2.wav',
-            'size': 1024,
-            'mod_time': datetime.datetime.now(),
-            'hash': 'abc123',
-            'used': False
+            "path": "/dummy/path/file2.wav",
+            "size": 1024,
+            "mod_time": datetime.datetime.now(),
+            "hash": "abc123",
+            "used": False,
         }
         self.file3 = {
-            'path': '/dummy/path/file3.wav',
-            'size': 2048,
-            'mod_time': datetime.datetime.now(),
-            'hash': 'def456',
-            'used': False
+            "path": "/dummy/path/file3.wav",
+            "size": 2048,
+            "mod_time": datetime.datetime.now(),
+            "hash": "def456",
+            "used": False,
         }
         self.files_info = [self.file1, self.file2, self.file3]
 
@@ -46,6 +49,6 @@ class TestDuplicateFinder(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]), 2)
 
-if __name__ == '__main__':
-    unittest.main()
 
+if __name__ == "__main__":
+    unittest.main()

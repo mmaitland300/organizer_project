@@ -4,22 +4,23 @@ CacheManager - a simple JSON-based cache for storing file metadata and hashes.
 This module helps avoid reprocessing files that have not changed.
 """
 
-import os
 import json
-import threading
 import logging
-
+import os
+import threading
+from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 class CacheManager:
     CACHE_FILE = os.path.expanduser("~/.musicians_organizer_cache.json")
     _lock = threading.Lock()
 
     def __init__(self) -> None:
-        self.cache = {}
+        self.cache: Dict[str, Any] = {}
         self._load_cache()
-    
+
     def _load_cache(self) -> None:
         if os.path.exists(self.CACHE_FILE):
             try:
@@ -28,7 +29,7 @@ class CacheManager:
             except Exception as e:
                 logger.error(f"Failed loading cache: {e}")
                 self.cache = {}
-    
+
     def save_cache(self) -> None:
         with self._lock:
             try:
@@ -36,7 +37,7 @@ class CacheManager:
                     json.dump(self.cache, f, indent=2)
             except Exception as e:
                 logger.error(f"Failed saving cache: {e}")
-    
+
     def get(self, file_path: str, mod_time: float, size: int) -> dict:
         key = os.path.abspath(file_path)
         entry = self.cache.get(key)
@@ -45,17 +46,19 @@ class CacheManager:
             # Reconstruct datetime for mod_time
             try:
                 import datetime as _dt
+
                 if "mod_time" in data and isinstance(data["mod_time"], (int, float)):
                     data["mod_time"] = _dt.datetime.fromtimestamp(data["mod_time"])
             except Exception:
                 pass
             return data
         return {}
-    
+
     def update(self, file_path: str, mod_time: float, size: int, data: dict) -> None:
         key = os.path.abspath(file_path)
         # Convert datetime in data to timestamp
         import datetime as _dt
+
         cleaned = {}
         for k, v in data.items():
             if isinstance(v, _dt.datetime):
@@ -63,11 +66,7 @@ class CacheManager:
             else:
                 cleaned[k] = v
         with self._lock:
-            self.cache[key] = {
-                "mod_time": mod_time,
-                "size": size,
-                "data": cleaned
-            }
+            self.cache[key] = {"mod_time": mod_time, "size": size, "data": cleaned}
 
     def needs_update(self, file_path: str, mod_time: float, size: int) -> bool:
         """
@@ -77,9 +76,9 @@ class CacheManager:
         key = os.path.abspath(file_path)
         entry = self.cache.get(key)
         return (
-            entry is None or
-            entry.get("mod_time") != mod_time or
-            entry.get("size")    != size
+            entry is None
+            or entry.get("mod_time") != mod_time
+            or entry.get("size") != size
         )
 
     def flush(self) -> None:

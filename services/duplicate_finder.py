@@ -3,17 +3,22 @@ DuplicateFinderService – a background service for finding duplicate files.
 
 It groups files by size and then by an MD5 hash (computed with timeout and file size limits).
 """
+
 from __future__ import annotations
-import os
 
 import logging
-from typing import List, Dict, Any, Optional
+import os
+from typing import Any, Dict, List, Optional
+
 from PyQt5 import QtCore
+
 from utils.helpers import compute_hash  # Fallback for rare synchronous call
+
 from .hash_worker import HashWorker
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 class DuplicateFinderService(QtCore.QThread):
     """
@@ -23,6 +28,7 @@ class DuplicateFinderService(QtCore.QThread):
       - progress(current, total): progress of the hashing operation
       - finished(duplicate_groups): list of duplicate file groups
     """
+
     progress = QtCore.pyqtSignal(int, int)
     finished = QtCore.pyqtSignal(list)
 

@@ -4,19 +4,26 @@ WaveformPlayerWidget - integrated waveform display and audio playback control.
 """
 
 import os
-from typing import Optional, Any
-from PyQt5 import QtWidgets, QtCore
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from PyQt5.QtCore import QUrl
+from typing import Any, Optional
+
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt5 import QtCore, QtWidgets
+from PyQt5.QtCore import QUrl
+from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
 
+from config.settings import ENABLE_WAVEFORM_PREVIEW
 from services.waveform_plotter import WaveformPlotter
 from utils.helpers import format_time
-from config.settings import ENABLE_WAVEFORM_PREVIEW
+
 
 class WaveformPlayerWidget(QtWidgets.QWidget):
-    def __init__(self, file_path: str, theme: str = "light", parent: Optional[QtWidgets.QWidget] = None) -> None:
+    def __init__(
+        self,
+        file_path: str,
+        theme: str = "light",
+        parent: Optional[QtWidgets.QWidget] = None,
+    ) -> None:
         super().__init__(parent)
         self.file_path = file_path
         self.theme = theme.lower()
@@ -62,7 +69,9 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
         # Unified plotting; desired resolution via max_points
         WaveformPlotter.plot(self.file_path, self.ax, max_points=1000)
         # Update total duration metadata
-        self.total_duration_secs = self.player.duration() / 1000.0 if self.player else 0.0
+        self.total_duration_secs = (
+            self.player.duration() / 1000.0 if self.player else 0.0
+        )
         self.totalTimeLabel.setText(format_time(self.total_duration_secs))
         self.canvas.draw()
 
@@ -125,4 +134,3 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
             self.player.setPosition(new_ms)
             self.slider.setValue(new_ms)
             self.update_cursor()
-

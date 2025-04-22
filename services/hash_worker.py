@@ -11,7 +11,7 @@ services like DuplicateFinderService or a future FileScanner stage.
 from __future__ import annotations
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore
 
@@ -55,7 +55,11 @@ class HashWorker(QtCore.QThread):
 
         for fi in self._files:
             if self._cancelled:
-                logger.info("HashWorker cancelled – returning partial results (%s/%s)", processed, total)
+                logger.info(
+                    "HashWorker cancelled – returning partial results (%s/%s)",
+                    processed,
+                    total,
+                )
                 break
 
             # Compute hash only if missing or None

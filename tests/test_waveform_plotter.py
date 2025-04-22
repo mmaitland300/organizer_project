@@ -1,10 +1,13 @@
 # tests/test_waveform_plotter.py
-import unittest
 import tempfile
-import numpy as np
+import unittest
+
 import matplotlib.pyplot as plt
+import numpy as np
 import soundfile as sf
+
 from services.waveform_plotter import WaveformPlotter
+
 
 class TestWaveformPlotter(unittest.TestCase):
     def create_sine(self, duration=1.0, sr=8000, freq=440):
@@ -24,6 +27,7 @@ class TestWaveformPlotter(unittest.TestCase):
         xs, ys = lines[0].get_data()
         self.assertGreater(len(xs), 0)
         self.assertGreater(len(ys), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
