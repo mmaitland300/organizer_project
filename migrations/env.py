@@ -1,9 +1,16 @@
 # ---> Keep imports and other setup at the top of env.py the same <---
 # (Ensure logging setup is present if you had it before)
+import os, sys
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
 import logging
 from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from sqlalchemy import MetaData, create_engine
+
+from config.settings import DB_FILENAME, ALL_FEATURE_KEYS
 
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG) # Optional: keep for debugging
@@ -13,7 +20,12 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = None
+# point at your SQLite file
+engine = create_engine(f"sqlite:///{DB_FILENAME}")
+ 
+# reflect the current DB into MetaData
+target_metadata = MetaData()
+target_metadata.reflect(bind=engine)
 
 # ---> Keep run_migrations_offline() function if you need it <---
 def run_migrations_offline() -> None:
@@ -29,8 +41,6 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
-
-# ---> Replace your run_migrations_online function with this EXACT version <---
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
     Handles engine creation or uses connection from config attributes.

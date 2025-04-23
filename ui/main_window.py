@@ -114,37 +114,44 @@ class StatsWorker(QtCore.QThread):
         stats = None # Initialize stats variable
 
         try:
-            # --- ADD try...except specifically around the DB call ---
+            # --- ADD specific try...except around the DB call ---
             try:
                 logger.info("StatsWorker: Calling get_feature_statistics(refresh=True)...")
+                # This is the potentially hanging/erroring call:
+                logger.debug("StatsWorker: >>> Entering DB stats calculation call.")
                 stats = self.db_manager.get_feature_statistics(refresh=True)
+                logger.debug("StatsWorker: <<< Exited DB stats calculation call.")
                 logger.info("StatsWorker: get_feature_statistics call completed.")
             except Exception as db_error:
+                # Log the specific error from the DB call
                 logger.error(f"StatsWorker: CRITICAL ERROR during get_feature_statistics call: {db_error}", exc_info=True)
                 message = f"Error calling database for statistics: {db_error}"
                 success = False
-                # Set stats to None ensure subsequent check fails gracefully
-                stats = None
+                stats = None # Ensure stats is None so subsequent check fails gracefully
             # --- END specific try...except ---
 
             # Check the result *after* the call attempt
+            # This part only runs if the DB call didn't raise an exception caught above
             if stats is not None:
-                 success = True
+                 success = True # Only set success True if stats calculation *actually* succeeded
                  logger.info("StatsWorker: Statistics calculation successful.")
-            elif not message.startswith("Error calling database"): # Avoid overwriting DB error message
+            # Only set error message if DB call didn't already set one
+            elif not message.startswith("Error calling database"):
                  message = "Statistics calculation failed or returned no data."
                  logger.error(message)
-                 success = False # Ensure success is False if stats is None
+                 success = False # Ensure success is False
 
         except Exception as e:
-            # Catch any other unexpected errors in the worker logic
+            # Catch any other unexpected errors in the worker's overall logic
             message = f"Unexpected error within StatsWorker run method: {e}"
             logger.error(message, exc_info=True)
             success = False
         finally:
-            # This finally block should now always be reached unless the thread is forcibly killed
+            # This finally block MUST be reached now unless the thread hangs completely
             logger.info(f"StatsWorker thread run() finished. Emitting finished signal (success={success}).")
+            # Emit the signal to trigger onStatsWorkerFinished in MainWindow
             self.finished.emit(success, message)
+    # --- End modified run method ---
 
 class MainWindow(QtWidgets.QMainWindow):
     """
@@ -775,8 +782,25 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
 
+    def is_any_task_busy(self) -> bool:
+        """Checks if any background controller or stats worker is active."""
+        # Check controller states directly
+        is_scan_busy = self.scan_ctrl.state != ControllerState.Idle
+        is_dup_busy = self.dup_ctrl.state != ControllerState.Idle
+        is_anal_busy = self.anal_ctrl.state != ControllerState.Idle
+        # Check stats flag
+        is_stats_busy = self._is_calculating_stats
+
+        # Return True if any are busy
+        return is_scan_busy or is_dup_busy or is_anal_busy or is_stats_busy
+
     def autoTagFiles(self) -> None:
         """Applies auto-tagging (currently key from filename) to all loaded files."""
+
+        if self.is_any_task_busy(): # Assuming is_any_task_busy helper exists as defined before
+             QMessageBox.warning(self, "Auto Tag", "Cannot tag files while another task is running.")
+             return
+
         if not self.all_files_info:
             QtWidgets.QMessageBox.information(
                 self, "Auto Tag", "No files loaded to tag."
@@ -784,17 +808,15 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         logger.info("Starting auto-tagging...")
-        # Apply tagging directly to the in-memory list
         updated_count = 0
         db = DatabaseManager.instance()
-        files_to_save = []
+        files_to_save: List[Dict[str, Any]] = []
         for file_info in self.all_files_info:
-            original_key = file_info.get("key")
-            # Apply auto-tagging logic (only key for now)
-            file_info = AutoTagService.auto_tag(file_info)
-            if file_info.get("key") != original_key:
+            # Apply auto-tagging in-place and get a flag if anything changed
+            modified = AutoTagService.auto_tag(file_info)
+            if modified:
                 updated_count += 1
-                files_to_save.append(file_info)  # Mark for DB save only if changed
+                files_to_save.append(file_info)
 
         if updated_count > 0:
             logger.info(
@@ -1166,45 +1188,39 @@ class MainWindow(QtWidgets.QMainWindow):
     def onAdvancedAnalysisFinished(self, updated_files: List[Dict[str, Any]]) -> None:
         """Handles finished signal from AnalysisController."""
         logger.info("Advanced analysis finished signal received.")
-        # --- Update UI based on analysis results ---
+
+        # --- 1) Update UI with the new analysis results ---
         self.progressBar.setValue(100)
         self.all_files_info = updated_files
         self.model.updateData(self.all_files_info)
         self.updateSummaryLabel()
-        # --- End UI Update ---
         self.statusBar().showMessage("Analysis complete. Starting statistics update...")
-        # Check flag AND worker state before starting new one
+
+        # --- 2) Clear stale stats flag if worker died or never started ---
+        if self._is_calculating_stats and (not self.stats_worker or not self.stats_worker.isRunning()):
+            logger.warning("Stale stats flag detected; resetting before starting fresh.")
+            self._is_calculating_stats = False
+            self._update_ui_state()
+
+        # --- 3) Guard against real simultaneous runs ---
         if self._is_calculating_stats:
-             logger.warning("Statistics calculation flag is already set. Skipping new trigger.")
-             # If the flag is set but the worker somehow died, reset the flag and UI state
-             if self.stats_worker is None or not self.stats_worker.isRunning():
-                  logger.warning("Resetting stale statistics calculation flag.")
-                  self._is_calculating_stats = False
-                  self._update_ui_state()
-             return
-        # Also check worker just in case flag/worker state mismatch
-        if self.stats_worker and self.stats_worker.isRunning():
-             logger.warning("StatsWorker object exists and is running. Skipping new trigger.")
-             return
-        logger.info("Creating and starting StatsWorker thread for statistics refresh.")
-
-        self.stats_worker = StatsWorker(self)
-        # Prevent double‐triggering
-        if self._is_calculating_stats or (self.stats_worker and self.stats_worker.isRunning()):
+            logger.warning("Statistics calculation already in progress. Skipping trigger.")
             return
-        
-        # 1. Set the flag
-        self._is_calculating_stats = True
-        logger.debug("_is_calculating_stats set to True.")
-        # 2. Update UI so recommendation button immediately disables
-        self._update_ui_state()
+        if self.stats_worker and self.stats_worker.isRunning():
+            logger.warning("StatsWorker already running. Skipping trigger.")
+            return
 
-        # 3. Create and connect worker
+        # --- 4) Instantiate, connect, flag, and start StatsWorker ---
+        logger.info("Creating and starting StatsWorker thread for statistics refresh.")
         self.stats_worker = StatsWorker(self)
         self.stats_worker.finished.connect(self.onStatsWorkerFinished)
 
-        # 4. Start it
+        self._is_calculating_stats = True
+        logger.debug("_is_calculating_stats set to True.")
+        self._update_ui_state()
+
         self.stats_worker.start()
+
 
 
     def updateSummaryLabel(self) -> None:

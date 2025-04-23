@@ -9,7 +9,7 @@ import logging
 import threading
 import json
 import datetime
-import numpy as np
+import math
 from typing import Dict, Any, List, Optional, Tuple, Union
 from config.settings import ALL_FEATURE_KEYS # Import the list of features
 
@@ -40,55 +40,36 @@ class DatabaseManager:
     @classmethod
     def instance(cls) -> "DatabaseManager":
         if cls._instance is None:
-            # Add extra logging for singleton creation instance
             logger.debug("Creating new DatabaseManager singleton instance.")
             cls._instance = cls()
         return cls._instance
 
     def __init__(self):
-        """
-        Initializes the DatabaseManager.
-        Relies on Alembic to manage schema creation/updates.
-        The _create_schema call is removed.
-        """
-        # This check prevents re-running __init__ on the existing instance
-        # if DatabaseManager.instance() was called before direct instantiation.
-        # It relies on tests resetting _instance = None before creating test instances.
         if hasattr(DatabaseManager._instance, 'connection') and DatabaseManager._instance.connection is not None:
-             logger.debug("DatabaseManager instance already initialized with connection.")
              return
-
         logger.debug("Initializing DatabaseManager attributes.")
-        self._lock = threading.Lock()
+        self._lock = threading.RLock() # Keep RLock for DB/memory cache
+        # Optional: Separate lock specifically for file cache I/O if high contention expected
+        # self._stats_file_lock = threading.Lock()
         self._feature_stats: Optional[Dict[str, Dict[str, float]]] = None
         self.connection: Optional[sqlite3.Connection] = None
-        self._connect()
-        # self._create_schema() # <<< REMOVED - Rely on Alembic
-
-        # Note: Setting _instance here might be problematic if instance() was called first.
-        # The classmethod instance() is the primary way to get/create the instance.
+        try:
+            self._connect()
+        except Exception as e:
+             logger.critical(f"Database connection failed on init: {e}", exc_info=True)
 
 
     def _connect(self) -> None:
-        # Connect method remains the same as before
+        """Establishes the SQLite database connection."""
+        # Ensure this method does not acquire self._lock, __init__ handles it
         try:
-            # Check if connection already exists (e.g., from a previous failed init attempt)
-            if hasattr(self, 'connection') and self.connection is not None:
-                 logger.warning("Connection attempt skipped, self.connection already exists.")
-                 return
-
-            logger.debug(f"Attempting to connect to DB: {self.DB_FILENAME}")
-            # Ensure parent directory exists (useful for first run)
             db_dir = os.path.dirname(self.DB_FILENAME)
-            if db_dir: # Check if path includes a directory
-                 os.makedirs(db_dir, exist_ok=True)
-
+            if db_dir: os.makedirs(db_dir, exist_ok=True)
             self.connection = sqlite3.connect(
                 self.DB_FILENAME,
-                detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES, # For timestamp handling
-                check_same_thread=False # Required for multi-threaded access
+                detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+                check_same_thread=False
             )
-            # Enable WAL mode for better concurrency (good practice with threads)
             self.connection.execute("PRAGMA journal_mode = WAL;")
             self.connection.execute("PRAGMA foreign_keys = ON;")
             logger.info(f"Connected to SQLite database at {self.DB_FILENAME}")
@@ -162,10 +143,12 @@ class DatabaseManager:
             return
         sql = self._build_save_sql()
         params = self._prepare_save_params(file_info)
-
+        logger.debug(f"Attempting lock for save_file_record: {file_info.get('path')}")
         try:
             with self._lock, self.connection:
+                logger.debug(f"Lock ACQUIRED for save_file_record: {file_info.get('path')}")
                 self.connection.execute(sql, params)
+            logger.debug(f"Lock RELEASED for save_file_record: {file_info.get('path')}")
         except Exception as e:
             # Log the parameters that caused the error for debugging
             logger.error(f"Failed to save file record for {file_info.get('path')}. Params: {params}. Error: {e}", exc_info=True)
@@ -182,10 +165,12 @@ class DatabaseManager:
 
         sql = self._build_save_sql()
         params_list = [self._prepare_save_params(fi) for fi in file_infos]
-
+        logger.debug(f"Attempting lock for batch save of {len(file_infos)} records.")
         try:
             with self._lock, self.connection:
+                logger.debug(f"Lock ACQUIRED for batch save of {len(file_infos)} records.")
                 self.connection.executemany(sql, params_list)
+            logger.debug(f"Lock RELEASED for batch save of {len(file_infos)} records.")
             logger.info(f"Successfully saved batch of {len(file_infos)} records.")
         except Exception as e:
             logger.error(f"Failed batch save file records: {e}", exc_info=True)
@@ -260,8 +245,11 @@ class DatabaseManager:
         if not self.connection:
             logger.error("No database connection. Cannot get file record.")
             return None
+        
+        logger.debug(f"Attempting lock for get_file_record: {file_path}")
         try:
             with self._lock:
+                logger.debug(f"Lock ACQUIRED for get_file_record: {file_path}")
                 # Select all columns explicitly for reliable order with _row_to_dict
                 # Fetch column names dynamically is safer if schema changes often
                 # For now, assume * order matches schema for simplicity if _get_column_names fails
@@ -280,6 +268,7 @@ class DatabaseManager:
                      return None # Or handle differently
                 else:
                      return None # No row found
+            logger.debug(f"Lock RELEASED for get_file_record: {file_path}")
         except Exception as e:
             logger.error(f"Failed to fetch record for {file_path}: {e}", exc_info=True)
             return None
@@ -290,8 +279,10 @@ class DatabaseManager:
         if not self.connection:
             logger.error("No database connection. Cannot fetch all file records.")
             return results
+        logger.debug("Attempting lock for get_all_files")
         try:
             with self._lock:
+                logger.debug("Lock ACQUIRED for get_all_files")
                 sql = "SELECT * FROM files"
                 cur = self.connection.cursor()
                 cur.execute(sql)
@@ -307,7 +298,8 @@ class DatabaseManager:
                 cur.close()
                 # Convert rows using fetched column names
                 results = [self._row_to_dict(row, column_names) for row in rows]
-
+                logger.debug(f"Fetched {len(results)} total records from database.")
+            logger.debug("Lock RELEASED for get_all_files")
         except Exception as e:
             logger.error(f"Failed to fetch all file records: {e}", exc_info=True)
         return results
@@ -318,11 +310,14 @@ class DatabaseManager:
         if not self.connection:
             logger.error("No database connection. Cannot delete file record.")
             return
+        logger.info(f"Attempting to delete record for path: {file_path}")
         try:
             with self._lock, self.connection:
+                logger.debug(f"Lock ACQUIRED for delete_file_record: {file_path}")
                 sql = "DELETE FROM files WHERE file_path = ?"
                 self.connection.execute(sql, (file_path,))
                 logger.debug(f"Deleted record for path: {file_path}")
+            logger.debug(f"Lock RELEASED for delete_file_record: {file_path}")
         except Exception as e:
             logger.error(f"Failed to delete file record for {file_path}: {e}", exc_info=True)
 
@@ -332,16 +327,18 @@ class DatabaseManager:
         if not self.connection:
             logger.error("No database connection. Cannot delete files by folder.")
             return
-
+        logger.debug(f"Attempting lock for delete_files_in_folder: {folder_path}")
         folder_path_norm = os.path.normpath(folder_path)
         like_pattern = folder_path_norm + '%'
         logger.info(f"Attempting to delete records with path prefix: {like_pattern}")
 
         try:
             with self._lock, self.connection:
+                logger.debug(f"Lock ACQUIRED for delete_files_in_folder: {folder_path_norm}")
                 sql = "DELETE FROM files WHERE file_path LIKE ?"
                 cursor = self.connection.execute(sql, (like_pattern,))
                 logger.info(f"Deleted {cursor.rowcount} old records matching prefix: {folder_path_norm}")
+            logger.debug(f"Lock RELEASED for delete_files_in_folder: {folder_path_norm}")
         except Exception as e:
             logger.error(f"Failed to delete folder records for {folder_path_norm}: {e}", exc_info=True)
 
@@ -360,6 +357,7 @@ class DatabaseManager:
 
         try:
             with self._lock:
+                logger.debug(f"Lock ACQUIRED for get_files_in_folder: {folder_path_norm}")
                 sql = "SELECT * FROM files WHERE file_path LIKE ?"
                 cur = self.connection.cursor()
                 cur.execute(sql, (like_pattern,))
@@ -374,6 +372,7 @@ class DatabaseManager:
                 cur.close()
                 results = [self._row_to_dict(row, column_names) for row in rows]
                 logger.debug(f"Fetched {len(results)} records matching prefix: {folder_path_norm}")
+            logger.debug(f"Lock RELEASED for get_files_in_folder: {folder_path_norm}")
         except Exception as e:
             logger.error(f"Failed to fetch folder records for {folder_path_norm}: {e}", exc_info=True)
         return results
@@ -382,8 +381,10 @@ class DatabaseManager:
     def get_file_record_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Fetch a single file record by primary key ID."""
         if not self.connection: return None
+        logger.debug(f"Attempting lock for get_file_record_by_id: {record_id}")
         try:
             with self._lock:
+                logger.debug(f"Lock ACQUIRED for get_file_record_by_id: {record_id}")
                 sql = "SELECT * FROM files WHERE id = ?"
                 cur = self.connection.cursor()
                 cur.execute(sql, (record_id,))
@@ -393,127 +394,180 @@ class DatabaseManager:
                 if row and column_names:
                     return self._row_to_dict(row, column_names)
                 return None
+            logger.debug(f"Lock RELEASED for get_file_record_by_id: {record_id}")
         except Exception as e:
             logger.error(f"Failed to fetch record for ID {record_id}: {e}", exc_info=True)
             return None
 
-    # --- New Methods for Statistics Calculation and Caching ---
-
+    # --- Internal Statistics Calculation (Safe with RLock) ---
     def _calculate_feature_statistics(self) -> Dict[str, Dict[str, float]]:
         """
-        Calculates mean and standard deviation for each feature in ALL_FEATURE_KEYS
-        across all files with non-NULL values for that feature.
-
-        Returns:
-            Dict[str, Dict[str, float]]: {'feature_name': {'mean': M, 'std': S}, ...}
-                                         Returns empty dict on error or no connection.
-                                         'std' will be 0 if only one value exists or all values are identical.
+        Calculates feature statistics using SQL aggregates.
+        Assumes caller holds the lock if called during a larger transaction,
+        but also safe if called standalone due to RLock.
         """
-        if not self.connection:
-            logger.error("No database connection. Cannot calculate feature statistics.")
-            return {}
-
-        stats = {}
-        logger.info("Calculating feature statistics...")
+        if not self.connection: return {}
+        stats: Dict[str, Dict[str, float]] = {}
+        numerical_features = ALL_FEATURE_KEYS
+        logger.info("Calculating feature statistics using SQL aggregates...")
+        logger.debug("Attempting lock for _calculate_feature_statistics (RLock)...")
         try:
-            with self._lock: # Ensure thread safety during DB access
-                cursor = self.connection.cursor()
-                for feature_key in ALL_FEATURE_KEYS:
-                    # Query only non-NULL values for the current feature
-                    sql = f"SELECT {feature_key} FROM files WHERE {feature_key} IS NOT NULL"
-                    cursor.execute(sql)
-                    # Fetch all values as a flat list, converting from tuples
-                    values = [row[0] for row in cursor.fetchall()]
-
-                    if values:
-                        values_np = np.array(values, dtype=np.float64) # Use float64 for precision
-                        mean = float(np.mean(values_np))
-                        # Calculate std dev, handle cases with < 2 values (std dev is 0)
-                        if len(values_np) > 1:
-                            std_dev = float(np.std(values_np))
-                        else:
-                            std_dev = 0.0
-                        stats[feature_key] = {'mean': mean, 'std': std_dev}
-                        logger.debug(f"Stats for {feature_key}: mean={mean:.4f}, std={std_dev:.4f} (n={len(values_np)})")
-                    else:
-                        logger.warning(f"No non-NULL data found for feature '{feature_key}'. Skipping stats calculation.")
-                        # Store None or default values if desired, here we just skip
-                        stats[feature_key] = {'mean': 0.0, 'std': 0.0} # Default if no data
-
-                cursor.close()
+            with self._lock: # Acquire RLock
+                logger.debug("Lock ACQUIRED for _calculate_feature_statistics (RLock).")
+                with self.connection:
+                    cursor = self.connection.cursor()
+                    # ... (Loop through features, execute SQL, calculate stats) ...
+                    for feature_key in numerical_features:
+                         # ... (SQL Calculation logic) ...
+                         sql = f"SELECT COUNT({feature_key}), AVG({feature_key}), AVG({feature_key} * {feature_key}) FROM files WHERE {feature_key} IS NOT NULL"
+                         mean, std_dev = 0.0, 0.0
+                         try:
+                              cursor.execute(sql)
+                              result = cursor.fetchone()
+                              if result is not None:
+                                   count, avg_val, avg_sq_val = result
+                                   if count > 0 and avg_val is not None and avg_sq_val is not None:
+                                       mean = float(avg_val)
+                                       variance = float(avg_sq_val) - (mean * mean)
+                                       if variance < 0: variance = 0
+                                       std_dev = np.sqrt(variance * count / (count - 1)) if count > 1 else 0.0
+                         except Exception as e: logger.error(f"Error calculating stats for feature {feature_key}: {e}", exc_info=True)
+                         stats[feature_key] = {'mean': mean, 'std': std_dev}
+                    cursor.close()
+            logger.debug("Lock RELEASED for _calculate_feature_statistics (RLock).")
             logger.info("Feature statistics calculation complete.")
             return stats
         except Exception as e:
-            logger.error(f"Failed to calculate feature statistics: {e}", exc_info=True)
-            return {} # Return empty on error
-
-    def _save_stats_to_cache(self, stats: Dict[str, Dict[str, float]]) -> None:
-        """Saves the calculated statistics to the JSON cache file."""
-        logger.debug(f"Saving feature statistics to cache: {STATS_CACHE_FILENAME}")
-        try:
-            with open(STATS_CACHE_FILENAME, 'w') as f:
-                json.dump(stats, f, indent=4)
-        except Exception as e:
-            logger.error(f"Failed to save statistics cache to {STATS_CACHE_FILENAME}: {e}", exc_info=True)
-
-    def _load_stats_from_cache(self) -> Optional[Dict[str, Dict[str, float]]]:
-        """Loads statistics from the JSON cache file."""
-        if not os.path.exists(STATS_CACHE_FILENAME):
-            logger.debug("Statistics cache file not found.")
-            return None
-        logger.debug(f"Loading feature statistics from cache: {STATS_CACHE_FILENAME}")
+            logger.error(f"Outer exception during statistics calculation: {e}", exc_info=True)
+            return {}
+        
+    # --- Cache File Helpers (NO LOCKING INSIDE) ---
+    def _load_stats_from_file_unsafe(self) -> Optional[Dict[str, Dict[str, float]]]:
+        """Loads statistics from JSON file. Caller must handle concurrency if needed."""
+        if not os.path.exists(STATS_CACHE_FILENAME): return None
+        logger.debug(f"Loading feature statistics from cache file: {STATS_CACHE_FILENAME}")
         try:
             with open(STATS_CACHE_FILENAME, 'r') as f:
                 stats = json.load(f)
-                # Basic validation: check if it's a dict and contains expected keys structure
-                if isinstance(stats, dict) and all(isinstance(v, dict) and 'mean' in v and 'std' in v for v in stats.values()):
-                     return stats
-                else:
-                     logger.warning("Statistics cache file format seems invalid. Ignoring cache.")
-                     return None
-        except (json.JSONDecodeError, Exception) as e:
+            # Validation
+            if isinstance(stats, dict) and all(isinstance(v, dict) and 'mean' in v and 'std' in v for v in stats.values()):
+                 logger.debug("Successfully loaded stats from file.")
+                 return stats
+            else:
+                 logger.warning("Statistics cache file format invalid.")
+                 return None
+        except Exception as e:
             logger.error(f"Failed to load statistics cache from {STATS_CACHE_FILENAME}: {e}", exc_info=True)
             return None
 
+    def _save_stats_to_file_unsafe(self, stats: Dict[str, Dict[str, float]]) -> None:
+        """Saves statistics to JSON file. Caller must handle concurrency if needed."""
+        logger.debug(f"Saving feature statistics to cache file: {STATS_CACHE_FILENAME}")
+        try:
+            temp_filename = STATS_CACHE_FILENAME + ".tmp"
+            with open(temp_filename, 'w') as f:
+                json.dump(stats, f, indent=4)
+            os.replace(temp_filename, STATS_CACHE_FILENAME) # Atomic replace
+            logger.debug("Successfully saved stats cache file.")
+        except Exception as e:
+            logger.error(f"Failed to save statistics cache to {STATS_CACHE_FILENAME}: {e}", exc_info=True)
+    
+    def _save_stats_to_cache(self, stats: Dict[str, Dict[str, float]]) -> None:
+        """Saves calculated statistics to the JSON cache file (thread-safe)."""
+        logger.debug(f"Attempting lock to save stats cache: {STATS_CACHE_FILENAME}")
+        with self._lock: # Acquire lock for file write
+             logger.debug(f"Lock ACQUIRED for save stats cache.")
+             try:
+                 with open(STATS_CACHE_FILENAME, 'w') as f:
+                     json.dump(stats, f, indent=4)
+                 logger.debug(f"Successfully saved stats cache.")
+             except Exception as e:
+                 logger.error(f"Failed to save statistics cache: {e}", exc_info=True)
+        logger.debug(f"Lock RELEASED for save stats cache.")
+
+    def _load_stats_from_cache(self) -> Optional[Dict[str, Dict[str, float]]]:
+        """Loads statistics from the JSON cache file (thread-safe)."""
+        if not os.path.exists(STATS_CACHE_FILENAME): return None
+        logger.debug(f"Attempting lock to load stats cache: {STATS_CACHE_FILENAME}")
+        stats = None
+        with self._lock: # Acquire lock for file read
+            logger.debug(f"Lock ACQUIRED for load stats cache.")
+            try:
+                with open(STATS_CACHE_FILENAME, 'r') as f:
+                    loaded_data = json.load(f)
+                # Validate structure
+                if isinstance(loaded_data, dict) and all(isinstance(v, dict) and 'mean' in v and 'std' in v for v in loaded_data.values()):
+                    stats = loaded_data
+                    logger.debug(f"Successfully loaded stats cache.")
+                else:
+                     logger.warning("Statistics cache file format invalid.")
+            except Exception as e:
+                logger.error(f"Failed to load statistics cache: {e}", exc_info=True)
+        logger.debug(f"Lock RELEASED for load stats cache.")
+        return stats
+
+    # --- REFACTORED Public Statistics Method ---
     def get_feature_statistics(self, refresh: bool = False) -> Optional[Dict[str, Dict[str, float]]]:
         """
-        Gets feature statistics (mean, std dev), loading from cache or recalculating.
-
-        Args:
-            refresh (bool): If True, forces recalculation and updates the cache.
-
-        Returns:
-            Optional[Dict[str, Dict[str, float]]]: Dictionary of statistics or None if unavailable.
+        Gets feature statistics, loading from cache or recalculating.
+        Manages lock only for memory cache access and DB calculation call.
+        File I/O happens outside the main lock.
         """
-        # Use self._lock to ensure thread safety when accessing/updating self._feature_stats cache
-        with self._lock:
-            if not refresh and self._feature_stats is not None:
-                logger.debug("Returning in-memory cached feature statistics.")
-                return self._feature_stats
+        logger.debug(f"Getting feature statistics (refresh={refresh})...")
+        calculated_stats: Optional[Dict[str, Dict[str, float]]] = None # Hold results outside lock
 
-            if not refresh:
-                logger.debug("In-memory cache miss, attempting to load from file cache...")
-                cached_stats = self._load_stats_from_cache()
-                if cached_stats is not None:
+        # 1. Check memory cache (brief lock)
+        if not refresh:
+             logger.debug("Attempting lock for memory cache check...")
+             with self._lock:
+                 logger.debug("Lock ACQUIRED for memory cache check.")
+                 if self._feature_stats is not None:
+                     logger.debug("Returning in-memory cached stats.")
+                     return self._feature_stats # Lock released automatically
+             logger.debug("Lock RELEASED for memory cache check.") # Auto-released
+             logger.debug("In-memory cache miss.")
+
+        # 2. Check file cache (NO lock held during file read)
+        if not refresh:
+            cached_stats = self._load_stats_from_file_unsafe() # Read file outside lock
+            if cached_stats is not None:
+                logger.info("Loaded stats from file cache. Updating memory cache...")
+                # Update memory cache (brief lock)
+                logger.debug("Attempting lock for memory cache update (from file)...")
+                with self._lock:
+                    logger.debug("Lock ACQUIRED for memory cache update (from file).")
                     self._feature_stats = cached_stats
-                    logger.info("Successfully loaded feature statistics from file cache.")
-                    return self._feature_stats
-                else:
-                    logger.info("File cache miss or invalid. Recalculating statistics.")
-                    # Proceed to calculate if file cache load failed
-
-            # Calculate (or recalculate if refresh=True or cache load failed)
-            calculated_stats = self._calculate_feature_statistics()
-            if calculated_stats: # Only update cache if calculation was successful
-                self._feature_stats = calculated_stats
-                self._save_stats_to_cache(calculated_stats) # Update file cache
-                logger.info("Calculated and cached new feature statistics.")
+                logger.debug("Lock RELEASED for memory cache update (from file).")
+                return self._feature_stats # Return the newly loaded stats
             else:
-                 # If calculation failed, don't overwrite potentially stale memory cache
-                 # self._feature_stats remains as it was (None or previous value)
-                 logger.error("Statistics calculation failed. Using potentially stale or no statistics.")
+                logger.info("File cache miss or invalid.")
 
-            return self._feature_stats # Return the current state (possibly None)
+        # 3. Recalculate if refreshing or cache miss (call needs lock internally)
+        logger.info("Recalculating feature statistics...")
+        calculated_stats = self._calculate_feature_statistics() # This method handles its own RLock via 'with'
+
+        # 4. Update caches if calculation succeeded (brief lock for memory, no lock for file)
+        if calculated_stats:
+            logger.info("Calculation successful. Updating memory cache and saving to file...")
+            # Update memory cache (brief lock)
+            logger.debug("Attempting lock for memory cache update (post-calc)...")
+            with self._lock:
+                logger.debug("Lock ACQUIRED for memory cache update (post-calc).")
+                self._feature_stats = calculated_stats
+            logger.debug("Lock RELEASED for memory cache update (post-calc).")
+            # Save to file cache (NO lock held during file write)
+            self._save_stats_to_file_unsafe(calculated_stats)
+        else:
+             logger.error("Statistics calculation failed. Using potentially stale or no statistics.")
+             # Do not update memory or file cache if calculation failed
+
+        # 5. Return current state of memory cache (brief lock)
+        logger.debug("Attempting lock for final stats return...")
+        with self._lock:
+             logger.debug("Lock ACQUIRED for final stats return.")
+             final_result = self._feature_stats # Read the potentially updated value
+        logger.debug("Lock RELEASED for final stats return.")
+        return final_result
 
     # --- Renamed Unscaled Similarity Method ---
     def find_similar_files_unscaled(self, reference_file_id: int, num_results: int = 10) -> List[Dict[str, Any]]:
@@ -524,8 +578,10 @@ class DatabaseManager:
         # (Paste the *exact* previous implementation of find_similar_files here)
         if not self.connection: return []
         logger.info(f"Finding files similar to ID: {reference_file_id} (UNSCALED)") # Added logging indicator
+        logger.debug(f"Attempting lock for find_similar_files_unscaled: {reference_file_id}")
         try:
             with self._lock:
+                logger.debug(f"Lock ACQUIRED for find_similar_files_unscaled: {reference_file_id}")
                 # 1. Get reference features
                 ref_dict = self.get_file_record_by_id(reference_file_id)
                 if not ref_dict: return []
@@ -577,6 +633,7 @@ class DatabaseManager:
                         "db_id": row_dict.get("id")
                     })
                 return similar_files
+            logger.debug(f"Lock RELEASED for find_similar_files_unscaled: {reference_file_id}")
         except Exception as e:
             logger.error(f"Failed unscaled similarity search for ID {reference_file_id}: {e}", exc_info=True)
             return []
@@ -641,8 +698,10 @@ class DatabaseManager:
 
         # 3. Fetch Candidate Files' Features
         candidate_files = []
+        logger.debug(f"Attempting lock for candidate file fetch for ID {reference_file_id}")
         try:
             with self._lock:
+                logger.debug(f"Lock ACQUIRED for candidate file fetch for ID {reference_file_id}")
                 # Select ID, path, tags, and all feature columns for candidate files
                 select_cols = ['id', 'file_path', 'tags'] + ALL_FEATURE_KEYS
                 select_cols_str = ", ".join(select_cols)
@@ -669,6 +728,7 @@ class DatabaseManager:
                 cursor.close()
                 for row in rows:
                     candidate_files.append(dict(zip(column_names, row)))
+            logger.debug(f"Lock RELEASED for candidate file fetch for ID {reference_file_id}")
 
         except Exception as e:
             logger.error(f"Failed to fetch candidate files for similarity search: {e}", exc_info=True)
@@ -709,7 +769,7 @@ class DatabaseManager:
                 distance_sq_sum += (ref_features_scaled[key] - scaled_value) ** 2
 
             if valid_candidate:
-                distance = np.sqrt(distance_sq_sum)
+                distance = math.sqrt(distance_sq_sum)
                 results_with_distance.append(
                     {
                         "path": cand_dict.get("file_path"),
