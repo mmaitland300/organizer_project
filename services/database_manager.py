@@ -64,7 +64,6 @@ class DatabaseManager:
         logger.debug("Initializing DatabaseManager attributes.")
         self._lock = threading.RLock()
         self._feature_stats: Optional[Dict[str, Dict[str, float]]] = None
-        # REMOVE: self.connection: Optional[sqlite3.Connection] = None
         self.engine: Optional[Engine] = None # <<< Add SQLAlchemy Engine attribute
 
         try:
@@ -91,7 +90,7 @@ class DatabaseManager:
 
             # --- REMOVE Migration Call ---
             # Migrations should be run externally (e.g., app startup or test setup)
-            # REMOVE: self._run_migrations() # <<< REMOVE THIS
+            
 
         except Exception as e:
             logger.critical(f"SQLAlchemy engine creation failed: {e}", exc_info=True)
@@ -436,114 +435,104 @@ class DatabaseManager:
         return results
     
     # Helper to get record by ID (used in find_similar_files example)
+    # --- REFACTORED ---
     def get_file_record_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
-        """Fetch a single file record by primary key ID."""
-        if not self.connection: return None
-        logger.debug(f"Attempting lock for get_file_record_by_id: {record_id}")
+        """Fetch a single file record by primary key ID using SQLAlchemy Core."""
+        if not self.engine:
+            logger.error("No SQLAlchemy engine. Cannot get file record by ID.")
+            return None
+
+        logger.debug(f"Attempting lock for get_file_record_by_id (SQLAlchemy): {record_id}")
         try:
             with self._lock:
-                logger.debug(f"Lock ACQUIRED for get_file_record_by_id: {record_id}")
-                sql = "SELECT * FROM files WHERE id = ?"
-                cur = self.connection.cursor()
-                cur.execute(sql, (record_id,))
-                row = cur.fetchone()
-                column_names = self._get_column_names(cur)
-                cur.close()
-                if row and column_names:
-                    return self._row_to_dict(row, column_names)
-                return None
-            logger.debug(f"Lock RELEASED for get_file_record_by_id: {record_id}")
+                logger.debug(f"Lock ACQUIRED for get_file_record_by_id (SQLAlchemy): {record_id}")
+                with self.engine.connect() as connection:
+                    # Use text() for raw SQL, :param_name for parameters
+                    sql = "SELECT * FROM files WHERE id = :record_id"
+                    cursor_result = connection.execute(text(sql), {"record_id": record_id})
+                    column_names = self._get_column_names(cursor_result)
+                    row = cursor_result.fetchone()
+                    if row and column_names:
+                        return self._row_to_dict(row, column_names)
+                    return None # Not found or column names failed
+            logger.debug(f"Lock RELEASED for get_file_record_by_id (SQLAlchemy)")
         except Exception as e:
-            logger.error(f"Failed to fetch record for ID {record_id}: {e}", exc_info=True)
+            logger.error(f"Failed to fetch record (SQLAlchemy) for ID {record_id}: {e}", exc_info=True)
             return None
 
     # --- Internal Statistics Calculation (Safe with RLock) ---
+    # --- REFACTORED ---
     def _calculate_feature_statistics(self) -> Dict[str, Dict[str, float]]:
         """
-        Calculates feature statistics (count, mean, std dev) using SQL aggregates.
+        Calculates feature statistics (count, mean, std dev) using SQL aggregates via SQLAlchemy Core.
         Excludes non-numeric features or features deemed unsuitable for std dev (e.g., bit_depth).
-        Assumes caller holds the lock if called during a larger transaction,
-        but also safe if called standalone due to RLock.
         """
-        if not self.connection:
-            logger.error("Cannot calculate stats: No database connection.")
+        if not self.engine:
+            logger.error("Cannot calculate stats: No SQLAlchemy engine.")
             return {}
 
         stats: Dict[str, Dict[str, float]] = {}
-        # Define features suitable for mean/std calculation (exclude bit_depth or others if needed)
         features_for_stats_calc = [
-            key for key in ALL_FEATURE_KEYS if key != 'bit_depth'
+            key for key in ALL_FEATURE_KEYS if key != 'bit_depth' # Example exclusion
         ]
-        # Optionally, track features for just COUNT/AVG (like bit_depth)
-        # features_for_avg_only = ['bit_depth'] # Example
 
-        logger.info(f"Calculating feature statistics for keys: {features_for_stats_calc}")
+        logger.info(f"Calculating feature statistics using SQLAlchemy for keys: {features_for_stats_calc}")
         logger.debug("Attempting lock for _calculate_feature_statistics (RLock)...")
         try:
-            # Use RLock to allow re-entrant calls if needed, ensures thread safety
             with self._lock:
                 logger.debug("Lock ACQUIRED for _calculate_feature_statistics (RLock).")
-                # Use connection context manager for transaction handling
-                with self.connection:
-                    cursor = self.connection.cursor()
+                # Use SQLAlchemy engine connection context
+                with self.engine.connect() as connection:
+                     # Use SQLAlchemy connection transaction context
+                    with connection.begin(): # Start a transaction
+                        for feature_key in features_for_stats_calc:
+                            # Use text() for raw SQL aggregates
+                            # Using :feature_key binds doesn't work directly in COUNT/SUM/AVG
+                            # So we need to carefully construct the SQL string.
+                            # Ensure feature_key is just the column name for safety.
+                            if not feature_key.isidentifier(): # Basic safety check
+                                logger.warning(f"Skipping potentially unsafe feature key for stats: {feature_key}")
+                                continue
 
-                    # Calculate Mean and Std Dev for suitable features
-                    for feature_key in features_for_stats_calc:
-                        # SQL to get count, sum, sum of squares (for variance)
-                        # Filter out NULL values for meaningful stats
-                        sql = f"""
-                            SELECT
-                                COUNT({feature_key}),
-                                SUM({feature_key}),
-                                SUM({feature_key} * {feature_key})
-                            FROM files
-                            WHERE {feature_key} IS NOT NULL AND ABS({feature_key}) < 1e30 -- Avoid potential infinity/NaN issues
-                        """
-                        count = 0
-                        mean = 0.0
-                        std_dev = 0.0
-                        try:
-                            cursor.execute(sql)
-                            result = cursor.fetchone()
-                            if result and result[0] is not None:
-                                count, sum_val, sum_sq_val = result
-                                count = int(count)
-                                if count > 0 and sum_val is not None and sum_sq_val is not None:
-                                    mean = float(sum_val) / count
-                                    # Calculate variance: E[X^2] - (E[X])^2
-                                    variance = (float(sum_sq_val) / count) - (mean * mean)
-                                    # Correct for potential floating point inaccuracies giving small negative variance
-                                    if variance < 0 and variance > -1e-9: variance = 0.0
-                                    # Calculate sample standard deviation (use count > 1)
-                                    if variance >= 0 and count > 1:
-                                        # Bessel's correction (sample std dev)
-                                        std_dev = math.sqrt(variance * count / (count - 1))
-                                    elif variance >=0 and count == 1:
-                                        std_dev = 0.0 # Std dev is 0 for a single point
-                                    else: # Should not happen if variance >= 0 check passes
-                                         std_dev = 0.0
-                        except sqlite3.Error as e:
-                            logger.error(f"SQL error calculating stats for feature '{feature_key}': {e}", exc_info=False)
-                        except Exception as e:
-                            logger.error(f"Error calculating stats for feature '{feature_key}': {e}", exc_info=True)
+                            sql = text(f"""
+                                SELECT
+                                    COUNT("{feature_key}"),
+                                    SUM("{feature_key}"),
+                                    SUM("{feature_key}" * "{feature_key}")
+                                FROM files
+                                WHERE "{feature_key}" IS NOT NULL AND ABS("{feature_key}") < 1e30
+                            """) # Use text() and quote identifier
 
-                        stats[feature_key] = {'mean': mean, 'std': std_dev, 'count': count}
+                            count = 0
+                            mean = 0.0
+                            std_dev = 0.0
+                            try:
+                                cursor_result = connection.execute(sql)
+                                result = cursor_result.fetchone()
+                                if result and result[0] is not None:
+                                    count, sum_val, sum_sq_val = result
+                                    count = int(count)
+                                    if count > 0 and sum_val is not None and sum_sq_val is not None:
+                                        mean = float(sum_val) / count
+                                        variance = (float(sum_sq_val) / count) - (mean * mean)
+                                        if variance < 0 and variance > -1e-9: variance = 0.0
+                                        if variance >= 0 and count > 1:
+                                            std_dev = math.sqrt(variance * count / (count - 1)) # Sample std dev
+                                        elif variance >= 0 and count == 1:
+                                            std_dev = 0.0
+                                        else:
+                                            std_dev = 0.0
+                            except Exception as e:
+                                logger.error(f"Error calculating stats via SQLAlchemy for feature '{feature_key}': {e}", exc_info=True)
 
-                    # Optionally calculate only COUNT/AVG for other features like bit_depth
-                    # for feature_key in features_for_avg_only:
-                    #    # ... simplified SQL and calculation ...
-                    #    stats[feature_key] = {'mean': avg_val, 'std': 0.0, 'count': count} # Store std=0
-
-                    cursor.close()
+                            stats[feature_key] = {'mean': mean, 'std': std_dev, 'count': count}
+                # Transaction commits automatically here if no exceptions
             logger.debug("Lock RELEASED for _calculate_feature_statistics (RLock).")
-            logger.info("Feature statistics calculation complete.")
-            # Log calculated stats for debugging
-            # logger.debug(f"Calculated stats: {stats}")
+            logger.info("Feature statistics calculation complete (SQLAlchemy).")
             return stats
         except Exception as e:
-            # Catch errors related to locking or connection context
-            logger.error(f"Outer exception during statistics calculation: {e}", exc_info=True)
-            return {} # Return empty on major failure
+            logger.error(f"Outer exception during statistics calculation (SQLAlchemy): {e}", exc_info=True)
+            return {}
         
     # --- Cache File Helpers (NO LOCKING INSIDE) ---
     def _load_stats_from_file_unsafe(self) -> Optional[Dict[str, Dict[str, float]]]:
@@ -674,252 +663,203 @@ class DatabaseManager:
         return final_result
 
     # --- Renamed Unscaled Similarity Method ---
+    # --- REFACTORED ---
     def find_similar_files_unscaled(self, reference_file_id: int, num_results: int = 10) -> List[Dict[str, Any]]:
         """
-        Original implementation: Finds files similar to the reference file based on stored feature columns
-        using raw Euclidean distance. Kept for reference or specific use cases.
+        Finds files similar to the reference file based on stored feature columns
+        using raw Euclidean distance, executed via SQLAlchemy Core.
         """
-        # (Paste the *exact* previous implementation of find_similar_files here)
-        if not self.connection: return []
-        logger.info(f"Finding files similar to ID: {reference_file_id} (UNSCALED)") # Added logging indicator
-        logger.debug(f"Attempting lock for find_similar_files_unscaled: {reference_file_id}")
+        if not self.engine:
+            logger.error("No SQLAlchemy engine. Cannot perform unscaled similarity search.")
+            return []
+
+        logger.info(f"Finding files similar to ID: {reference_file_id} (UNSCALED, SQLAlchemy)")
+        logger.debug(f"Attempting lock for find_similar_files_unscaled (SQLAlchemy): {reference_file_id}")
         try:
             with self._lock:
-                logger.debug(f"Lock ACQUIRED for find_similar_files_unscaled: {reference_file_id}")
-                # 1. Get reference features
+                logger.debug(f"Lock ACQUIRED for find_similar_files_unscaled (SQLAlchemy): {reference_file_id}")
+                # 1. Get reference features (uses refactored get_file_record_by_id)
                 ref_dict = self.get_file_record_by_id(reference_file_id)
                 if not ref_dict: return []
                 ref_features = {key: ref_dict.get(key) for key in ALL_FEATURE_KEYS}
-                 # Check if any essential feature is None in the reference - if so, cannot compare
-                if any(ref_dict.get(key) is None for key in ALL_FEATURE_KEYS):
-                      logger.warning(f"Reference file ID {reference_file_id} is missing some feature values. Cannot perform unscaled similarity.")
-                      return []
+                if any(v is None for v in ref_features.values()):
+                    logger.warning(f"Reference file ID {reference_file_id} missing some feature values. Cannot perform unscaled similarity.")
+                    return []
 
-                # 2. Build query
+                # 2. Build query string and parameters (Similar logic, but for text())
                 distance_parts = []
                 params = {}
                 for i, key in enumerate(ALL_FEATURE_KEYS):
+                    if not key.isidentifier(): continue # Safety check
                     param_name = f"ref_{key}"
-                    # Use COALESCE to handle potential NULLs in *other* files during SQL distance calculation
-                    # Though ideally, files with NULLs should perhaps be excluded or handled differently
-                    distance_parts.append(f"POW(COALESCE({key}, 0) - :{param_name}, 2)")
-                    params[param_name] = ref_features[key] # Assume ref_features has non-NULL values based on check above
-                distance_sql = f"SQRT({ ' + '.join(distance_parts) })"
+                    # Ensure column names are quoted if needed (using double quotes is standard)
+                    # Use standard SQL POW and COALESCE functions if available, otherwise adapt syntax
+                    distance_parts.append(f'POW(COALESCE("{key}", 0) - :{param_name}, 2)')
+                    params[param_name] = ref_features[key]
+
+                if not distance_parts:
+                    logger.error("No valid features found to build distance query.")
+                    return []
+
+                distance_sql_inner = " + ".join(distance_parts)
+                # Use standard SQL SQRT if available, otherwise adapt
+                distance_sql = f"SQRT({distance_sql_inner})"
                 params['ref_id'] = reference_file_id
                 params['limit'] = num_results
-                select_cols = ['id', 'file_path', 'tags'] # Keep selection minimal
-                select_cols_str = ", ".join(select_cols)
-                sim_sql = f"""
+                select_cols = ['id', 'file_path', 'tags']
+                select_cols_str = ", ".join(f'"{c}"' for c in select_cols) # Quote cols
+
+                # Ensure all features in the WHERE clause are quoted identifiers
+                where_not_null = ' AND '.join(f'"{key}" IS NOT NULL' for key in ALL_FEATURE_KEYS if key.isidentifier())
+
+                sim_sql_str = f"""
                     SELECT {select_cols_str}, {distance_sql} AS distance
                     FROM files
                     WHERE id != :ref_id
-                      AND {' AND '.join(f'{key} IS NOT NULL' for key in ALL_FEATURE_KEYS)} -- Ensure candidates have features
+                      AND ({where_not_null}) -- Ensure candidates have features
                     ORDER BY distance ASC
                     LIMIT :limit
                 """
 
-                # 3. Execute
-                cur = self.connection.cursor()
-                cur.execute(sim_sql, params)
-                similar_rows = cur.fetchall()
-                sim_col_names = [desc[0] for desc in cur.description] if cur.description else []
-                cur.close()
+                # 3. Execute using SQLAlchemy connection
+                similar_rows = []
+                sim_col_names = []
+                with self.engine.connect() as connection:
+                    cursor_result = connection.execute(text(sim_sql_str), params)
+                    sim_col_names = self._get_column_names(cursor_result)
+                    similar_rows = cursor_result.fetchall()
 
                 # 4. Format Results
                 similar_files = []
-                if not sim_col_names: return []
+                if not sim_col_names:
+                    logger.warning("Similarity query executed but failed to get column names.")
+                    return []
                 for row in similar_rows:
                     row_dict = dict(zip(sim_col_names, row))
+                    # Safely parse tags
+                    tags_dict = {}
+                    try:
+                        tags_json = row_dict.get("tags", "{}")
+                        if tags_json: tags_dict = json.loads(tags_json)
+                    except json.JSONDecodeError: pass # Ignore bad JSON
+
                     similar_files.append({
                         "path": row_dict.get("file_path"),
-                        "tags": json.loads(row_dict.get("tags", "{}")),
+                        "tags": tags_dict,
                         "distance": row_dict.get("distance"),
                         "db_id": row_dict.get("id")
                     })
                 return similar_files
-            logger.debug(f"Lock RELEASED for find_similar_files_unscaled: {reference_file_id}")
+            logger.debug(f"Lock RELEASED for find_similar_files_unscaled (SQLAlchemy)")
         except Exception as e:
-            logger.error(f"Failed unscaled similarity search for ID {reference_file_id}: {e}", exc_info=True)
+            logger.error(f"Failed unscaled similarity search (SQLAlchemy) for ID {reference_file_id}: {e}", exc_info=True)
             return []
 
-
+    # --- New Scaled Similarity Method ---
+    # --- REFACTORED ---
     def find_similar_files(self, reference_file_id: int, num_results: int = 10) -> List[Dict[str, Any]]:
         """
-        Finds files similar to the reference file using Z-score scaled features
-        (from ALL_FEATURE_KEYS) and Euclidean distance calculated in Python.
-
-        Args:
-            reference_file_id (int): The primary key ID of the file to find similar items for.
-            num_results (int): The maximum number of similar files to return.
-
-        Returns:
-            List[Dict[str, Any]]: A list of dictionaries, each representing a similar file,
-                                including 'path', 'tags', 'db_id', and 'distance'.
-                                Sorted by ascending distance. Returns empty list on error
-                                or if reference file/stats are unavailable.
+        Finds files similar using Z-score scaled features and Euclidean distance (Python calc).
+        Fetches data using SQLAlchemy Core.
         """
-        if not self.connection:
-            logger.error("No DB connection for similarity search.")
+        if not self.engine: # Check engine first
+            logger.error("No SQLAlchemy engine. Cannot perform scaled similarity search.")
             return []
 
-        logger.info(f"Finding files similar to ID: {reference_file_id} (SCALED using ALL_FEATURE_KEYS)")
+        logger.info(f"Finding files similar to ID: {reference_file_id} (SCALED, SQLAlchemy)")
 
-        # 1. Get Feature Statistics (Mean/Std Dev)
-        # Use get_feature_statistics which handles caching/recalculation
-        stats = self.get_feature_statistics() # refresh=False by default
+        # 1. Get Feature Statistics (No change needed here)
+        stats = self.get_feature_statistics()
         if not stats:
-            logger.error("Feature statistics are unavailable. Cannot perform scaled similarity search.")
+            logger.error("Feature statistics unavailable. Cannot perform scaled similarity.")
             return []
 
-        # 2. Get Reference File Features
-        # Use the internal method that acquires lock correctly
+        # 2. Get Reference File Features (Uses refactored method)
         ref_dict = self.get_file_record_by_id(reference_file_id)
         if not ref_dict:
             logger.error(f"Reference file ID {reference_file_id} not found.")
             return []
 
-        # 3. Scale Reference Features
+        # 3. Scale Reference Features (No change needed here)
         ref_features_scaled = {}
         valid_ref_features = True
-        features_to_compare = ALL_FEATURE_KEYS # Use the comprehensive list from settings
-
+        features_to_compare = ALL_FEATURE_KEYS
         for key in features_to_compare:
             value = ref_dict.get(key)
-            if value is None:
-                logger.warning(f"Reference file ID {reference_file_id} missing feature '{key}'. Cannot perform similarity.")
-                valid_ref_features = False
-                break # Cannot compare if reference is missing essential features
-
+            if value is None: valid_ref_features = False; break
             stat = stats.get(key)
-            # Check if stats exist for this key (they should if calculation included it)
-            if not stat or 'mean' not in stat or 'std' not in stat:
-                logger.warning(f"Missing stats for feature '{key}'. Cannot scale reference feature. Excluding from comparison.")
-                # Optionally exclude this key if stats are missing, or abort:
-                # valid_ref_features = False; break
-                continue # Skip this feature for the reference
-
+            if not stat or 'mean' not in stat or 'std' not in stat: continue
             mean, std_dev = stat['mean'], stat['std']
-
-            # Scale the feature: (value - mean) / std_dev
-            # Handle std_dev being zero or very close to zero to avoid division errors
-            if std_dev > 1e-9: # Use epsilon for float comparison
-                ref_features_scaled[key] = (value - mean) / std_dev
-            else:
-                # If std dev is zero, all values are the mean, so scaled value is 0
-                ref_features_scaled[key] = 0.0
-
-        if not valid_ref_features:
-             logger.error("Reference file has missing features required for comparison.")
-             return []
-        if not ref_features_scaled:
-             logger.error("No features could be scaled for the reference file.")
-             return []
-
-        # Filter the list of keys to compare to only those successfully scaled in reference
+            ref_features_scaled[key] = (value - mean) / std_dev if std_dev > 1e-9 else 0.0
+        if not valid_ref_features: logger.error("Ref file missing features."); return []
         valid_feature_keys = list(ref_features_scaled.keys())
-        if not valid_feature_keys:
-             logger.error("No valid features remained after scaling reference.")
-             return []
+        if not valid_feature_keys: logger.error("No valid features for scaling ref."); return []
 
 
-        # 4. Fetch Candidate Files' Features
+        # 4. Fetch Candidate Files' Features using SQLAlchemy
         candidate_files_data = []
-        logger.debug(f"Attempting lock for candidate file fetch for ID {reference_file_id}")
+        logger.debug(f"Attempting lock for candidate fetch (SQLAlchemy) for ID {reference_file_id}")
         try:
-            with self._lock: # Acquire lock for DB read
-                logger.debug(f"Lock ACQUIRED for candidate file fetch for ID {reference_file_id}")
-                # Select ID, path, tags, and only the feature columns that were valid for reference
-                select_cols = ['id', 'file_path', 'tags'] + valid_feature_keys
-                select_cols_str = ", ".join(f'"{c}"' for c in select_cols) # Quote column names just in case
+            with self._lock:
+                logger.debug(f"Lock ACQUIRED for candidate fetch (SQLAlchemy) for ID {reference_file_id}")
+                with self.engine.connect() as connection:
+                    # Build select list and where clause safely
+                    select_cols = ['id', 'file_path', 'tags'] + valid_feature_keys
+                    select_cols_quoted = ", ".join(f'"{c}"' for c in select_cols if c.isidentifier()) # Quote safe identifiers
 
-                # Ensure candidate files also have non-NULL values for all required features
-                where_clauses = [f'"{key}" IS NOT NULL' for key in valid_feature_keys]
-                where_str = " AND ".join(where_clauses)
+                    where_clauses = [f'"{key}" IS NOT NULL' for key in valid_feature_keys if key.isidentifier()]
+                    where_str = " AND ".join(where_clauses)
 
-                sql = f"""
-                    SELECT {select_cols_str}
-                    FROM files
-                    WHERE id != ?
-                      AND ({where_str})
-                """
-                cursor = self.connection.cursor()
-                cursor.execute(sql, (reference_file_id,))
-                column_names = [desc[0] for desc in cursor.description] if cursor.description else []
+                    sql_str = f"""
+                        SELECT {select_cols_quoted}
+                        FROM files
+                        WHERE id != :ref_id
+                          AND ({where_str})
+                    """
+                    cursor_result = connection.execute(text(sql_str), {"ref_id": reference_file_id})
+                    column_names = self._get_column_names(cursor_result)
 
-                if not column_names:
-                    logger.error("Failed to get column names for candidate query.")
-                    cursor.close()
-                    return []
+                    if not column_names:
+                        logger.error("Failed to get column names for candidate query (SQLAlchemy).")
+                        return []
 
-                # Store candidates as dictionaries for easier processing
-                rows = cursor.fetchall()
-                cursor.close()
-                for row in rows:
-                    candidate_files_data.append(dict(zip(column_names, row)))
-            logger.debug(f"Lock RELEASED for candidate file fetch for ID {reference_file_id}")
-
-        except sqlite3.Error as e:
-            logger.error(f"Failed to fetch candidate files for similarity search (SQL Error): {e}", exc_info=False)
-            return []
+                    rows = cursor_result.fetchall()
+                    for row in rows:
+                        candidate_files_data.append(dict(zip(column_names, row)))
+            logger.debug(f"Lock RELEASED for candidate fetch (SQLAlchemy) for ID {reference_file_id}")
         except Exception as e:
-             logger.error(f"Failed to fetch candidate files for similarity search (Other Error): {e}", exc_info=True)
-             return []
-
-        if not candidate_files_data:
-            logger.info("No suitable candidate files found for comparison (all features non-NULL).")
+            logger.error(f"Failed to fetch candidate files (SQLAlchemy): {e}", exc_info=True)
             return []
 
-        # 5. Calculate Scaled Distances in Python
+        if not candidate_files_data: logger.info("No suitable candidates found."); return []
+
+        # 5. Calculate Scaled Distances in Python (No change needed here)
         results_with_distance = []
         for cand_dict in candidate_files_data:
             distance_sq_sum = 0.0
             valid_candidate = True
-
-            for key in valid_feature_keys: # Use only keys valid for reference
+            for key in valid_feature_keys:
                 value = cand_dict.get(key)
-                # We already filtered for NOT NULL in SQL, but double-check just in case
-                if value is None:
-                    logger.warning(f"Candidate file ID {cand_dict.get('id')} unexpectedly missing feature '{key}'. Skipping.")
-                    valid_candidate = False
-                    break
-
-                # Get stats for scaling (already fetched)
+                if value is None: valid_candidate = False; break
                 stat = stats.get(key)
-                if not stat: # Should not happen if key is in valid_feature_keys
-                    logger.warning(f"Missing stats for feature '{key}' during candidate scaling. Skipping candidate.")
-                    valid_candidate = False
-                    break
+                if not stat: valid_candidate = False; break
                 mean, std_dev = stat['mean'], stat['std']
-
-                # Scale candidate feature
-                scaled_value = 0.0
-                if std_dev > 1e-9:
-                    scaled_value = (value - mean) / std_dev
-                # else: scaled_value remains 0.0 (as set above)
-
-                # Add squared difference to sum using the corresponding scaled reference feature
+                scaled_value = (value - mean) / std_dev if std_dev > 1e-9 else 0.0
                 distance_sq_sum += (ref_features_scaled[key] - scaled_value) ** 2
-
             if valid_candidate:
                 distance = math.sqrt(distance_sq_sum)
-                # Safely parse tags JSON
                 tags_dict = {}
                 try:
                     tags_json = cand_dict.get("tags", "{}")
                     if tags_json: tags_dict = json.loads(tags_json)
-                except json.JSONDecodeError:
-                    logger.warning(f"Could not decode tags for candidate ID {cand_dict.get('id')}")
+                except json.JSONDecodeError: pass
+                results_with_distance.append({
+                    "path": cand_dict.get("file_path"),
+                    "tags": tags_dict,
+                    "distance": distance,
+                    "db_id": cand_dict.get("id") })
 
-                results_with_distance.append(
-                    {
-                        "path": cand_dict.get("file_path"),
-                        "tags": tags_dict,
-                        "distance": distance,
-                        "db_id": cand_dict.get("id")
-                    }
-                )
-
-        # 6. Sort Results and Return Top N
+        # 6. Sort Results and Return Top N (No change needed here)
         results_with_distance.sort(key=lambda x: x["distance"])
         logger.info(f"Found {len(results_with_distance)} similar files. Returning top {num_results}.")
         return results_with_distance[:num_results]
