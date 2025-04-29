@@ -1,4 +1,4 @@
-__version__ = "1.3.0"
+__version__ = "1.4.1"
 
 """
 Main entry point for Musicians Organizer.

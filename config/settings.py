@@ -8,7 +8,8 @@ import os
 import re
 import warnings
 from typing import Optional, Any, List, Dict, Tuple, Pattern
-
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -190,3 +191,33 @@ ALL_SAVABLE_COLUMNS = (
     + ALL_FEATURE_KEYS
     + ["bit_depth", "loudness_lufs", "pitch_hz", "attack_time"]
 )
+
+# ADD Database Configuration 
+# Use environment variable or default
+DEFAULT_DB_PATH = os.path.expanduser("~/.musicians_organizer.db")
+DB_PATH = os.environ.get("MUSICORG_DB_PATH", DEFAULT_DB_PATH)
+DB_URL = f"sqlite:///{DB_PATH}"
+
+STATS_CACHE_FILENAME = os.path.expanduser("~/.musicians_organizer_stats.json")
+# END Database Configuration 
+
+# ADD Engine Factory Function
+_engine_instance: Optional[Engine] = None
+
+def get_engine() -> Engine:
+    """Creates and returns a single SQLAlchemy Engine instance."""
+    global _engine_instance
+    if _engine_instance is None:
+        logger.info(f"Creating SQLAlchemy engine for URL: {DB_URL}")
+        # Ensure parent directory exists
+        db_dir = os.path.dirname(DB_PATH)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
+        _engine_instance = create_engine(
+            DB_URL,
+            connect_args={'check_same_thread': False}, # Needed for SQLite multithreading
+            echo=False # Set to True for debugging SQL
+        )
+        # Optional: Add PRAGMA event listener here if desired
+    return _engine_instance
