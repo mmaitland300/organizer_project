@@ -54,17 +54,35 @@ def test_pitch_filter(proxy_model, sample_files, min_pitch, max_pitch, expected_
            for i in range(proxy_model.rowCount())]
     assert set(ids) == set(expected_ids)
 
+# --- Test Attack Time ---
 @ pytest.mark.parametrize("min_ms,max_ms,expected_ids", [
-    (5, None, [1]),   # file a: 5ms => 0.005s
-    (None, 7, [1]),   # only a <=7ms
-    (5, 10, [1,2]),   # both a and b
-    (None, None, [1,2,3]),
+    # --- CORRECTED EXPECTED IDS for first case ---
+    (5, None, [1, 2]), # File 1 (5ms) AND File 2 (10ms) are >= 5ms
+    # ---------------------------------------------
+    (None, 7, [1]),   # Only File 1 (5ms) is <= 7ms
+    (5, 10, [1, 2]),  # File 1 (5ms) AND File 2 (10ms) are >= 5ms AND <= 10ms
+    (None, None, [1, 2, 3]), # No filter active (File 3 has None attack_time, included when filter inactive)
 ])
+
 def test_attack_time_filter(proxy_model, sample_files, min_ms, max_ms, expected_ids):
-    # Convert ms to seconds in setter
-    min_s = None if min_ms is None else min_ms / 1000.0
-    max_s = None if max_ms is None else max_ms / 1000.0
-    proxy_model.set_filter_attack_time_range(min_s, max_s)
-    ids = [sample_files[proxy_model.mapToSource(proxy_model.index(i,0)).row()]['db_id']
-           for i in range(proxy_model.rowCount())]
+    # --- FIX: Call setter directly with ms values ---
+    # The setter method expects milliseconds and converts them internally.
+    proxy_model.set_filter_attack_time_range(min_ms, max_ms)
+    # --- End Fix ---
+
+    # --- Keep result extraction and assertion ---
+    ids = []
+    for i in range(proxy_model.rowCount()):
+        source_index = proxy_model.mapToSource(proxy_model.index(i, 0))
+        if source_index.isValid():
+             # Check bounds for sample_files list
+             if 0 <= source_index.row() < len(sample_files):
+                 ids.append(sample_files[source_index.row()]['db_id'])
+             else:
+                 # This indicates an issue mapping rows, potentially log it
+                 print(f"Warning: Invalid source row index {source_index.row()} mapped from proxy row {i}")
+        else:
+             # This indicates an issue mapping rows
+             print(f"Warning: Invalid source index mapped from proxy row {i}")
+
     assert set(ids) == set(expected_ids)

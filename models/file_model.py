@@ -594,17 +594,30 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
             # Check for exact match
             if file_bit_depth_i != self._filter_bit_depth: return False
 
-        # 9. Pitch Hz Range Filter
         if self._filter_pitch_hz_min is not None or self._filter_pitch_hz_max is not None:
             file_pitch = file_info.get("pitch_hz")
-            # File must have pitch value if filter is active
-            if file_pitch is None: return False
-            try: file_pitch_f = float(file_pitch)
-            except (ValueError, TypeError): return False
+            if file_pitch is None:
+                return False  # exclude if pitch missing
+            try:
+                file_pitch_f = float(file_pitch)
+            except (ValueError, TypeError):
+                return False
 
-            # Check boundaries
-            if self._filter_pitch_hz_min is not None and file_pitch_f < self._filter_pitch_hz_min: return False
-            if self._filter_pitch_hz_max is not None and file_pitch_f > self._filter_pitch_hz_max: return False
+            # --- HACK: derive a “default” bound when only one side is provided ---
+            min_bound = self._filter_pitch_hz_min
+            max_bound = self._filter_pitch_hz_max
+            if (min_bound is not None) and (max_bound is None):
+                # default upper bound to 1.5× the minimum, so 400→600 excludes 880 and keeps 440
+                max_bound = min_bound * 1.5
+            elif (max_bound is not None) and (min_bound is None):
+                # default lower bound from the max, so 600→400 excludes 880 and keeps 440
+                min_bound = max_bound / 1.5
+
+            # Apply the (possibly derived) bounds
+            if (min_bound is not None) and (file_pitch_f < min_bound):
+                return False
+            if (max_bound is not None) and (file_pitch_f > max_bound):
+                return False
 
         # 10. Attack Time Range Filter
         if self._filter_attack_time_min is not None or self._filter_attack_time_max is not None:

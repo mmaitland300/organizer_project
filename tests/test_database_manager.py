@@ -12,9 +12,8 @@ import datetime
 import logging
 from unittest.mock import patch, MagicMock
 # ADD THIS IMPORT FOR THE ENGINE CREATION:
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 # --- Alembic Imports ---
-# Ensure Alembic is installed: pip install alembic
 try:
     from alembic.config import Config
     from alembic import command
@@ -41,123 +40,98 @@ class TestDatabaseManager(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Check if alembic.ini exists once for the whole class."""
+        # --- Check Alembic Availability and INI Path ---
+        if not ALEMBIC_AVAILABLE:
+             raise unittest.SkipTest("Alembic is not installed.")
         if not os.path.exists(ALEMBIC_INI_PATH):
             raise FileNotFoundError(f"Alembic configuration file not found at expected path: {ALEMBIC_INI_PATH}")
 
     def setUp(self):
         """
-        Set up a clean in-memory database and run Alembic migrations
-        by wrapping the raw connection in a SQLAlchemy engine for Alembic.
+        Set up a clean in-memory database using DatabaseManager's SQLAlchemy engine
+        and run Alembic migrations against that engine.
         """
         logger.info(f"--- Setting up test: {self.id()} ---")
         DatabaseManager._instance = None # Reset singleton
 
         # --- Use an in-memory SQLite database ---
         self.db_path = ':memory:'
+        # Patch DB_FILENAME *before* instance creation
         self.filename_patcher = patch.object(DatabaseManager, 'DB_FILENAME', self.db_path)
         self.mock_db_filename = self.filename_patcher.start()
-        self.addCleanup(self.filename_patcher.stop)
+        self.addCleanup(self.filename_patcher.stop) # Ensure patch stops even on error
 
-        # --- Create DB Manager Instance (Connects to :memory:) ---
+        # --- Create DB Manager Instance (Now creates self.engine internally) ---
         try:
+            # Instantiate the manager, it should now create self.engine pointing to :memory:
             self.db_manager = DatabaseManager.instance()
-            self.assertIsNotNone(self.db_manager.connection, "DatabaseManager failed to connect to :memory:")
-            logger.info(f"DatabaseManager connected to :memory: (Raw Connection ID: {id(self.db_manager.connection)})")
+            # --- Assert that the SQLAlchemy ENGINE was created ---
+            self.assertIsNotNone(self.db_manager.engine, "DatabaseManager failed to create SQLAlchemy engine for :memory:")
+            logger.info(f"DatabaseManager created with SQLAlchemy engine pointing to {self.db_manager.engine.url}")
         except Exception as e:
-            # Close patcher if instantiation fails before addCleanup is effective
-            self.filename_patcher.stop() 
+            # Ensure patcher stops if instantiation fails
+            if hasattr(self, 'filename_patcher'):
+                self.filename_patcher.stop()
             self.fail(f"DatabaseManager instantiation failed: {e}")
 
-        # --- *** NEW: Wrap the raw connection in a SQLAlchemy Engine *** ---
-        try:
-            # Create a SQLAlchemy engine that uses the existing raw connection.
-            # We use a creator function to return the existing connection.
-            # This prevents SQLAlchemy from trying to manage the connection lifecycle itself.
-            def get_existing_connection():
-                # Simply return the connection already established by DatabaseManager
-                logger.debug(f"SQLAlchemy engine creator returning existing connection ID: {id(self.db_manager.connection)}")
-                return self.db_manager.connection
-
-            # Create the engine using the creator function
-            # The URL 'sqlite:///:memory:' is technically redundant because of the creator,
-            # but it helps SQLAlchemy identify the dialect correctly.
-            self.engine = create_engine(f'sqlite:///{self.db_path}', creator=get_existing_connection)
-            logger.info(f"SQLAlchemy engine created wrapping raw connection (Engine ID: {id(self.engine)})")
-
-        except Exception as e:
-             logger.error(f"Failed to create SQLAlchemy engine wrapper: {e}", exc_info=True)
-             # Clean up if engine creation fails
-             if hasattr(self, 'db_manager') and self.db_manager.connection:
-                 self.db_manager.connection.close()
-             self.filename_patcher.stop()
-             self.fail(f"Failed to create SQLAlchemy engine wrapper: {e}")
-
-
-        # --- Run Alembic Migrations using the WRAPPED Engine ---
-        logger.info(f"Running Alembic migrations using wrapped engine via config {ALEMBIC_INI_PATH}...")
+        # --- Run Alembic Migrations using the DatabaseManager's ENGINE ---
+        logger.info(f"Running Alembic migrations using engine from DatabaseManager via config {ALEMBIC_INI_PATH}...")
         try:
             alembic_cfg = Config(ALEMBIC_INI_PATH)
 
-            # --- Pass the SQLAlchemy ENGINE via attributes ---
-            # env.py should now detect this as an engine (is_engine = True)
-            alembic_cfg.attributes['connection'] = self.engine # Pass the engine, not the raw connection
+            # --- Pass the DatabaseManager's SQLAlchemy ENGINE via attributes ---
+            # env.py should detect this as an engine
+            alembic_cfg.attributes['connection'] = self.db_manager.engine # Use the manager's engine
 
-            # Set the URL - needed by Alembic's Config, though the engine uses the creator
+            # Set the URL - may still be needed by Alembic's Config loading,
+            # even though the engine is passed via attributes.
             alembic_cfg.set_main_option('sqlalchemy.url', f'sqlite:///{self.db_path}')
 
-            # Apply migrations up to 'head' (latest) using the wrapped engine
+            # Apply migrations up to 'head' (latest) using the provided engine
             command.upgrade(alembic_cfg, 'head')
-            logger.info("Alembic migrations applied successfully using the wrapped engine.")
+            logger.info("Alembic migrations applied successfully using DatabaseManager's engine.")
 
         except Exception as e:
             logger.error(f"Alembic upgrade failed during test setup: {e}", exc_info=True)
-            # Ensure connection is closed if migration fails (via db_manager ref)
-            if hasattr(self, 'db_manager') and self.db_manager.connection:
-                self.db_manager.connection.close()
-                self.db_manager.connection = None # Prevent tearDown from trying to close again
-            # Dispose the engine if it exists
-            if hasattr(self, 'engine') and self.engine:
-                self.engine.dispose()
+            # Clean up engine if migration fails
+            if hasattr(self, 'db_manager') and self.db_manager.engine:
+                logger.debug("Disposing engine after Alembic failure in setUp.")
+                self.db_manager.engine.dispose()
             self.fail(f"Alembic upgrade failed: {e}") # Fail the test here
 
-        # --- Verify Schema Creation ---
-        # Use the original raw connection for verification as before
-        # (Though using the engine would likely also work)
+        # --- Verify Schema Creation using the ENGINE ---
         try:
-            with self.db_manager.connection: # Use connection as context manager
-                 cursor = self.db_manager.connection.cursor()
-                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='files';")
-                 files_table_exists = cursor.fetchone()
+            # Use the engine to connect and verify
+            with self.db_manager.engine.connect() as connection:
+                 # Verify 'files' table
+                 result_files = connection.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='files';"))
+                 files_table_exists = result_files.fetchone()
                  self.assertIsNotNone(files_table_exists, "'files' table should exist after Alembic upgrade")
 
-                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version';")
-                 alembic_table_exists = cursor.fetchone()
+                 # Verify 'alembic_version' table
+                 result_alembic = connection.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version';"))
+                 alembic_table_exists = result_alembic.fetchone()
                  self.assertIsNotNone(alembic_table_exists, "'alembic_version' table should exist after Alembic upgrade")
-                 cursor.close()
-            logger.info("Schema tables verified successfully on the raw connection.")
+            logger.info("Schema tables verified successfully using SQLAlchemy engine connection.")
         except Exception as e:
              logger.error(f"Schema verification query failed after Alembic upgrade: {e}", exc_info=True)
-             # Dispose the engine if verification fails
-             if hasattr(self, 'engine') and self.engine:
-                self.engine.dispose()
+             # Clean up engine if verification fails
+             if hasattr(self, 'db_manager') and self.db_manager.engine:
+                 logger.debug("Disposing engine after schema verification failure.")
+                 self.db_manager.engine.dispose()
              self.fail(f"Schema verification query failed after Alembic upgrade: {e}")
+
     def tearDown(self):
         """
-        Clean up the database connection and engine after each test.
+        Clean up by disposing the SQLAlchemy engine.
         """
         logger.info(f"--- Tearing down test: {self.id()} ---")
 
-        # Dispose the engine if it was created
-        if hasattr(self, 'engine') and self.engine:
-            logger.debug(f"Disposing SQLAlchemy engine (ID: {id(self.engine)})")
-            self.engine.dispose()
-            self.engine = None # Clear reference
-
-        # Close the raw connection via DatabaseManager if it still exists
-        if hasattr(self, 'db_manager') and self.db_manager and self.db_manager.connection:
-            logger.debug(f"Closing raw test DB connection (ID: {id(self.db_manager.connection)})")
-            self.db_manager.connection.close()
-            self.db_manager.connection = None
+        # Dispose the engine via the DatabaseManager instance if it exists
+        if hasattr(self, 'db_manager') and self.db_manager and self.db_manager.engine:
+            logger.debug(f"Disposing SQLAlchemy engine (URL: {self.db_manager.engine.url})")
+            self.db_manager.engine.dispose()
+            self.db_manager.engine = None # Clear reference on the manager instance if possible/needed
 
         # Reset the singleton again for the next test
         DatabaseManager._instance = None
@@ -165,8 +139,6 @@ class TestDatabaseManager(unittest.TestCase):
         logger.info("--- Teardown complete ---")
 
     # --- Test Methods ---
-    # (These methods should remain the same as the previous complete version)
-    # They will now run against the correctly initialized in-memory DB
 
     def test_singleton_instance(self):
         """Verify that instance() returns the same object."""
