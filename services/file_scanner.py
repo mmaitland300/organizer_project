@@ -49,6 +49,7 @@ class FileScannerService(QtCore.QThread):
     def __init__(
         self,
         root_path: str,
+        db_manager: DatabaseManager, # <<< Accept db_manager instance
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
         """
@@ -56,27 +57,28 @@ class FileScannerService(QtCore.QThread):
 
         Args:
             root_path: The absolute path to the directory to scan.
+            db_manager: The DatabaseManager instance to use. # <<< Updated docstring
             parent: Optional parent QObject.
         """
         super().__init__(parent)
         if not os.path.isdir(root_path):
             logger.error(f"Invalid root path provided to FileScannerService: {root_path}")
-            # Consider raising ValueError or letting the initial setup fail later
-            # For robustness, allow initialization but run() will handle it
         self.root_path = root_path
         self._cancelled = False
-        # Initialize managers immediately
+
+        # --- Use the passed-in db_manager ---
+        self.db = db_manager # <<< Store the passed instance
+        if not self.db or not self.db.engine: # Check if valid manager/engine was passed
+             logger.error("FileScannerService initialized without a valid DatabaseManager/engine.")
+             raise ConnectionError("Database manager is not properly initialized.")
+        # --- End Modification ---
+
+        # Initialize cache manager (keep existing logic)
         try:
             self.cache_manager = CacheManager()
         except Exception as e:
             logger.error(f"Failed to initialize CacheManager: {e}", exc_info=True)
             self.cache_manager = None
-        try:
-            self.db = DatabaseManager.instance()
-        except Exception as e:
-            logger.error(f"Failed to initialize DatabaseManager: {e}", exc_info=True)
-            # Database is essential, raise error if it fails
-            raise ConnectionError("Failed to connect to database.") from e
 
     # --- Core Logic ---
     def run(self) -> None:

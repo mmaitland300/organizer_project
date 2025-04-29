@@ -100,11 +100,9 @@ class StatsWorker(QtCore.QThread):
     finished = QtCore.pyqtSignal(bool, str) # Signal: success(bool), message(str)
     # No progress signal needed for now, could be added if stats calc is chunked
 
-    def __init__(self, parent=None):
+    def __init__(self, db_manager: DatabaseManager, parent=None): # Accept db_manager
         super().__init__(parent)
-        # Ensure DatabaseManager is imported correctly
-        from services.database_manager import DatabaseManager
-        self.db_manager = DatabaseManager.instance()
+        self.db_manager = db_manager
 
     def run(self):
         """Performs the statistics calculation."""
@@ -159,8 +157,10 @@ class MainWindow(QtWidgets.QMainWindow):
     tasks and provides enhanced filtering capabilities.
     """
 
-    def __init__(self) -> None:
+    # --- MODIFY __init__ ---
+    def __init__(self, db_manager: DatabaseManager) -> None: # Accept db_manager
         super().__init__()
+        self.db_manager = db_manager # Store the instance
         self.setWindowTitle("Musicians Organizer")
         self.resize(1000, 700)
         self.all_files_info: List[Dict[str, Any]] = []
@@ -170,9 +170,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.theme: str = "light"  # Initialize theme attribute
 
         # --- Controllers ---
-        self.scan_ctrl = ScanController(self)
+        self.scan_ctrl = ScanController(db_manager=self.db_manager, parent=self) # <<< Pass db_manager
         self.dup_ctrl = DuplicatesController(self)
-        self.anal_ctrl = AnalysisController(self)
+        self.anal_ctrl = AnalysisController(db_manager=self.db_manager, parent=self) # <<< Pass db_manager
         self.stats_worker: Optional[StatsWorker] = None
 
         # --- ADD Explicit State Flag ---
@@ -425,7 +425,7 @@ class MainWindow(QtWidgets.QMainWindow):
         right_layout.setSpacing(5)
 
         # Create models (use the corrected FileTableModel from previous step)
-        self.model = FileTableModel([], self.size_unit)
+        self.model = FileTableModel([], self.db_manager, self.size_unit) # <<< Pass db_manager
         self.proxyModel = FileFilterProxyModel(self)
         self.proxyModel.setSourceModel(self.model)
 
@@ -638,7 +638,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
 
         # Delete from filesystem and DB
-        db = DatabaseManager.instance()
+        db = self.db_manager #  Use stored instance
         for path in paths_to_delete_fs:
             try:
                 if self.chkRecycleBin.isChecked():
@@ -765,7 +765,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         logger.info("Starting auto-tagging...")
         updated_count = 0
-        db = DatabaseManager.instance()
+        db = self.db_manager # <<< Use stored instance
         files_to_save: List[Dict[str, Any]] = []
         for file_info in self.all_files_info:
             # Apply auto-tagging in-place and get a flag if anything changed
@@ -839,7 +839,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Ensure stats are loaded/calculated (find_similar_files handles this internally now)
             # db_manager.get_feature_statistics() # No longer needed to call explicitly here
 
-            db_manager = DatabaseManager.instance()
+            db_manager = self.db_manager # <<< Use stored instance
             similar_files = db_manager.find_similar_files(
                 reference_file_id=reference_id,
                 num_results=num_results_to_fetch
@@ -1236,7 +1236,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         logger.info("Creating and starting StatsWorker thread for statistics refresh.")
-        self.stats_worker = StatsWorker(self)
+        self.stats_worker = StatsWorker(db_manager=self.db_manager, parent=self) # <<< Pass db_manager
         self.stats_worker.finished.connect(self.onStatsWorkerFinished)
         self._is_calculating_stats = True
         logger.debug("_is_calculating_stats set to True.")
@@ -1349,7 +1349,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
                 # Save the entire record to the database
                 try:
-                    DatabaseManager.instance().save_file_record(file_info)
+                    self.db_manager.save_file_record(file_info)
                 except Exception as e:
                     logger.error(
                         f"Failed to save updated tags to DB for {file_info.get('path')}: {e}"

@@ -35,19 +35,34 @@ class ScanController(QObject):
     error = pyqtSignal(str)
     stateChanged = pyqtSignal(object)
 
-    def __init__(self, parent: QObject = None) -> None:
+    # --- MODIFY: Update __init__ ---
+    def __init__(self, db_manager: DatabaseManager, parent: QObject = None) -> None: # <<< Accept db_manager
         super().__init__(parent)
         self._scanner: Optional[FileScannerService] = None
         self.state = ControllerState.Idle
+        self.db_manager = db_manager # <<< Store db_manager
 
     def start_scan(self, folder: str, bpm_detection: bool = False) -> None:
         """
         Begin scanning the given folder asynchronously.
         """
+        # --- ADD check for db_manager ---
+        if not self.db_manager or not self.db_manager.engine:
+            err_msg = "DatabaseManager not initialized in ScanController."
+            logger.error(err_msg)
+            self.error.emit(err_msg)
+            return
+        # --- End check --
         try:
-            if self._scanner:
-                self.cancel()
-            self._scanner = FileScannerService(folder) 
+            if self._scanner and self._scanner.isRunning():
+                 logger.warning("ScanController: Cancelling previous scanner before starting new one.")
+                 self.cancel() # Ensure previous is stopped if somehow still running
+                 # Potentially add a short wait or check state before proceeding
+
+            # --- MODIFY: Pass db_manager to FileScannerService ---
+            self._scanner = FileScannerService(folder, db_manager=self.db_manager) # <<< Pass stored db_manager
+            # --- End Modification ---
+
             self._scanner.progress.connect(self.progress)
             self._scanner.finished.connect(self._on_finished)
             # Switch to Running state
@@ -56,32 +71,59 @@ class ScanController(QObject):
             self.started.emit()
             QTimer.singleShot(0, self._scanner.start) # Keep using QTimer for async start
         except Exception as e:
-            logger.error(f"Scan start failed: {e}", exc_info=True) # Log traceback
+            logger.error(f"Scan start failed: {e}", exc_info=True)
+            self.state = ControllerState.Idle # Reset state on error
+            self.stateChanged.emit(self.state)
+            self.error.emit(f"Scan start failed: {e}") # Emit error signal
 
     def cancel(self) -> None:
         """
         Cancel an ongoing scan.
         """
-        if self._worker and self._worker.isRunning():
-            try:
-                self.state = ControllerState.Cancelling
-                self._worker.cancel()           # already present
-                self._worker.wait(100)        # Wait for the worker to finish
-            except Exception as e:
-                logger.error(f"Scan cancel failed: {e}", exc_info=True)
+        # --- Corrected cancel logic based on your previous code ---
+        if self._scanner and self._scanner.isRunning():
+             try:
+                 logger.info("ScanController: Requesting scanner cancellation.")
+                 self.state = ControllerState.Cancelling
+                 self.stateChanged.emit(self.state) # Emit cancelling state
+                 self._scanner.cancel()
+                 # Don't wait indefinitely here, _on_finished will handle state reset
+                 # self._scanner.wait(100) # Avoid long waits in controller slot
+             except Exception as e:
+                 logger.error(f"Scan cancel failed: {e}", exc_info=True)
+                 # Optionally reset state to Idle if cancel fails catastrophically
+                 # self.state = ControllerState.Idle
+                 # self.stateChanged.emit(self.state)
+        else:
+            logger.debug("ScanController: Cancel called but no scanner running.")
+            # Ensure state is Idle if cancel is called erroneously
+            if self.state != ControllerState.Idle:
+                 self.state = ControllerState.Idle
+                 self.stateChanged.emit(self.state)
+
 
     def _on_finished(self, files: List[Dict[str, Any]]) -> None:
         """
-        Handler invoked when scanning completes.
+        Handler invoked when scanning completes or is cancelled.
         """
-        logger.debug(f"ScanController received finished signal. Setting state to Idle.")
-        scanner_ref = self._scanner # Temp reference if needed
-        self.state = ControllerState.Idle
-        # Track whether the last run was cancelled
-        self._was_cancelled: bool = False  # ← initialize here :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+        # --- Corrected finished logic based on your previous code ---
+        logger.debug(f"ScanController received finished signal. Current state: {self.state}")
+        scanner_ref = self._scanner # Temp reference if needed for logging?
+
+        # Check if cancellation was requested. Scanner might finish normally even after cancel request.
+        was_cancelling = (self.state == ControllerState.Cancelling)
+        self.state = ControllerState.Idle # Always go to Idle when finished/cancelled
         self.stateChanged.emit(self.state)
-        self.finished.emit(files)
-        self._scanner = None
+
+        if was_cancelling:
+             logger.info("Scan finished after cancellation request.")
+             # May emit empty list or partial results depending on scanner's cancel behavior
+             self.finished.emit([]) # Emit empty list if cancelled is desired outcome
+        else:
+             logger.info("Scan finished normally.")
+             self.finished.emit(files) # Emit results normally
+
+        self._scanner = None # Clear scanner reference
         logger.debug("ScanController finished processing.")
 
 
@@ -152,21 +194,33 @@ class AnalysisController(QObject):
     error = pyqtSignal(str)
     stateChanged = pyqtSignal(object)
 
-    def __init__(self, parent: QObject = None) -> None:
+    # --- MODIFY: Update __init__ ---
+    def __init__(self, db_manager: DatabaseManager, parent: QObject = None) -> None: # <<< Accept db_manager
         super().__init__(parent)
         self._worker: Optional[AdvancedAnalysisWorker] = None
         self.state = ControllerState.Idle
-        self._was_cancelled: bool = False  # ← initialize here :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+        self._was_cancelled: bool = False
+        self.db_manager = db_manager # <<< Store db_manager
 
     def start_analysis(self, files_info: List[Dict[str, Any]]) -> None:
-        """
-        Begin advanced analysis on the provided file info list.
-        """
+        """ Begin advanced analysis on the provided file info list. """
+        if not self.db_manager or not self.db_manager.engine:
+            err_msg = "DatabaseManager not initialized in AnalysisController."
+            logger.error(err_msg)
+            self.error.emit(err_msg)
+            return
+
         self._was_cancelled = False
         try:
-            if self._worker:
-                self.cancel()
-            self._worker = AdvancedAnalysisWorker(files_info)
+            if self._worker and self._worker.isRunning():
+                 logger.warning("AnalysisController: Cancelling previous worker before starting new one.")
+                 self.cancel()
+
+            # --- MODIFY THIS LINE ---
+            # Pass the stored db_manager when creating the worker
+            self._worker = AdvancedAnalysisWorker(files_info, db_manager=self.db_manager)
+            # --- End Modification ---
+
             self._worker.progress.connect(self.progress)
             self._worker.finished.connect(self._on_finished)
             self.state = ControllerState.Running
@@ -174,7 +228,10 @@ class AnalysisController(QObject):
             self.started.emit()
             self._worker.start()
         except Exception as e:
-            self.error.emit(f"Analysis start failed: {e}")
+             logger.error(f"Analysis start failed: {e}", exc_info=True)
+             self.state = ControllerState.Idle
+             self.stateChanged.emit(self.state)
+             self.error.emit(f"Analysis start failed: {e}")
 
 
     def cancel(self):

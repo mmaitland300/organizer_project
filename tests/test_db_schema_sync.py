@@ -1,23 +1,29 @@
 # tests/test_db_schema_sync.py
 
-from services.database_manager import DatabaseManager
-from sqlalchemy import text
+import pytest # Import pytest
+from sqlalchemy import text, Engine # Import Engine for type hint
 from config.settings import ALL_SAVABLE_COLUMNS
 
-def test_db_columns_match_constants():
+# Import the test_engine fixture if you need it directly,
+# or just rely on the db_manager fixture which uses it.
+# from .conftest import test_engine # Example import if needed directly
+
+# MODIFY: Use the test_engine fixture provided by conftest.py
+def test_db_columns_match_constants(test_engine: Engine): # Inject the test_engine fixture
     """
     Verify that the actual columns in the 'files' table match the expected columns
     defined in configuration (plus the primary key 'id').
     """
-    db_manager = DatabaseManager.instance()
-    if not db_manager.engine:
-        # If using unittest framework, could use self.fail or skipTest
-        # For a simple function test, raising an error might be appropriate
-        raise RuntimeError("DatabaseManager engine not initialized. Cannot run schema sync test.")
+    # REMOVE: Old singleton access
+    # db_manager = DatabaseManager.instance()
+    # if not db_manager.engine:
+    #     raise RuntimeError("DatabaseManager engine not initialized. Cannot run schema sync test.")
+
 
     columns = set()
     try:
-        with db_manager.engine.connect() as connection:
+        # Use the injected test_engine directly
+        with test_engine.connect() as connection:
             pragma_sql = text("PRAGMA table_info(files)")
             cursor_result = connection.execute(pragma_sql)
             columns = {row[1] for row in cursor_result.fetchall()}

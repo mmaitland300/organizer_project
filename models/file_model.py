@@ -14,8 +14,11 @@ import math
 from typing import Any, Dict, List, Optional, Union
 
 from PyQt5 import QtCore
-
+# ADD DatabaseManager type hint import
 from services.database_manager import DatabaseManager
+from typing import TYPE_CHECKING # Use for type hinting only if needed to avoid circular imports at runtime
+if TYPE_CHECKING:
+    from services.database_manager import DatabaseManager
 # Import helpers and settings constants
 from utils.helpers import format_duration, format_multi_dim_tags, parse_multi_dim_tags
 
@@ -45,16 +48,20 @@ class FileTableModel(QtCore.QAbstractTableModel):
         "Tags",
     ]
 
+    # MODIFY __init__
     def __init__(
         self,
         files: Optional[List[Dict[str, Any]]] = None,
         size_unit: str = "KB",
+        db_manager: "DatabaseManager" = None, # <<< Accept db_manager
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
         super().__init__(parent)
-        # self._files holds the list of dictionaries, EACH dictionary contains ALL data (incl. new features)
         self._files = files if files is not None else []
         self.size_unit = size_unit
+        if db_manager is None: # Basic check, ideally raise error or handle properly
+             logger.error("FileTableModel initialized without a DatabaseManager!")
+        self._db_manager = db_manager # <<< Store db_manager
 
         # Use the statically defined headers
         self._column_count = len(self.COLUMN_HEADERS)
@@ -239,8 +246,12 @@ class FileTableModel(QtCore.QAbstractTableModel):
             current_index = self.index(row, col)
             self.dataChanged.emit(current_index, current_index, [role])
             if needs_db_save:
+                if not self._db_manager: # Check if db_manager exists
+                     logger.error("Cannot save changes: DatabaseManager not available in FileTableModel.")
+                     return False
                 try:
-                    DatabaseManager.instance().save_file_record(file_info)
+                    # MODIFY: Use stored instance variable
+                    self._db_manager.save_file_record(file_info) # <<< Use instance variable
                     logger.debug(f"Saved changes for {file_info.get('path')} after edit (Column: {self.COLUMN_HEADERS[col]}).")
                     return True
                 except Exception as e:

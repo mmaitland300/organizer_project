@@ -15,11 +15,14 @@ import threading
 import time
 import math
 from typing import Any, Dict, List, Optional
-
+# ADD DatabaseManager type hint import
+from services.database_manager import DatabaseManager # Already likely there
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from services.database_manager import DatabaseManager
 from PyQt5 import QtCore
-
 from services.analysis_engine import AnalysisEngine
-from services.database_manager import DatabaseManager
+
 
 # Configuration values; MAX_PARALLEL_ANALYSIS is optional in settings
 try:
@@ -105,9 +108,11 @@ class AdvancedAnalysisWorker(QtCore.QThread):
     PROGRESS_EVERY_N_FILES = 10
     PROGRESS_EVERY_SECS = 0.25
 
+    # MODIFY __init__
     def __init__(
         self,
         files: List[Dict[str, Any]],
+        db_manager: "DatabaseManager", # <<< Accept db_manager
         max_workers: Optional[int] = None,
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
@@ -116,6 +121,7 @@ class AdvancedAnalysisWorker(QtCore.QThread):
         self._cancelled = False
         self._lock = threading.Lock()
         self._executor: Optional[_cf.ThreadPoolExecutor] = None
+        self.db_manager = db_manager # <<< Store db_manager
 
         # Determine max_workers: explicit > setting > default heuristic
         if max_workers is not None:
@@ -189,7 +195,8 @@ class AdvancedAnalysisWorker(QtCore.QThread):
             # Save to DB if not cancelled
             if not self._cancelled and db_updates:
                 try:
-                    DatabaseManager.instance().save_file_records(db_updates)
+                    # MODIFY: Use stored instance variable
+                    self.db_manager.save_file_records(db_updates) # <<< Use instance variable
                     logger.info("Saved %d updated records to DB.", len(db_updates))
                 except Exception as e:
                     msg = f"Database write failed: {e}"
