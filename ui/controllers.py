@@ -62,12 +62,11 @@ class ScanController(QObject):
         """
         Cancel an ongoing scan.
         """
-        if self._scanner:
+        if self._worker and self._worker.isRunning():
             try:
-                self._scanner.cancel()
-                # Optionally wait briefly or check state before changing controller state
                 self.state = ControllerState.Cancelling
-                self.stateChanged.emit(self.state)
+                self._worker.cancel()           # already present
+                self._worker.wait(100)        # Wait for the worker to finish
             except Exception as e:
                 logger.error(f"Scan cancel failed: {e}", exc_info=True)
 
@@ -78,6 +77,8 @@ class ScanController(QObject):
         logger.debug(f"ScanController received finished signal. Setting state to Idle.")
         scanner_ref = self._scanner # Temp reference if needed
         self.state = ControllerState.Idle
+        # Track whether the last run was cancelled
+        self._was_cancelled: bool = False  # ← initialize here :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
         self.stateChanged.emit(self.state)
         self.finished.emit(files)
         self._scanner = None
@@ -155,11 +156,13 @@ class AnalysisController(QObject):
         super().__init__(parent)
         self._worker: Optional[AdvancedAnalysisWorker] = None
         self.state = ControllerState.Idle
+        self._was_cancelled: bool = False  # ← initialize here :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
 
     def start_analysis(self, files_info: List[Dict[str, Any]]) -> None:
         """
         Begin advanced analysis on the provided file info list.
         """
+        self._was_cancelled = False
         try:
             if self._worker:
                 self.cancel()
@@ -173,17 +176,25 @@ class AnalysisController(QObject):
         except Exception as e:
             self.error.emit(f"Analysis start failed: {e}")
 
-    def cancel(self) -> None:
-        """
-        Cancel ongoing advanced analysis.
-        """
-        if self._worker:
-            try:
-                self._worker.cancel()
-                self.state = ControllerState.Cancelling
-                self.stateChanged.emit(self.state)
-            except Exception as e:
-                self.error.emit(f"Analysis cancel failed: {e}")
+
+    def cancel(self):
+        """Requests cancellation of the currently running worker task."""
+        logger.info("AnalysisController cancel method called.")
+        self._was_cancelled = True # Set cancellation flag
+
+        if self._worker and self._worker.isRunning():
+            self.state = ControllerState.Cancelling
+            logger.info(f"Calling cancel() on worker: {self._worker}")
+            self._worker.cancel() # Call cancel on the actual worker instance
+            logger.info("Worker cancel() method called.")
+        else:
+            # If no worker running or instance doesn't exist, just ensure state is Idle
+            logger.info("No running worker found or worker is None, setting state to Idle.")
+            self.state = ControllerState.Idle
+
+
+    def was_cancelled(self) -> bool: # Helper method
+        return self._was_cancelled
 
     def _on_finished(self, updated_files: List[Dict[str, Any]]) -> None:
         """Handler invoked when advanced analysis completes."""

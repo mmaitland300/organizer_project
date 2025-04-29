@@ -219,304 +219,260 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- Load Settings ---
         self.loadSettings()
 
+
     def initUI(self) -> None:
-        """Creates and lays out the UI widgets."""
+        """Creates and lays out the UI widgets, including new feature filters."""
         central_widget = QtWidgets.QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QtWidgets.QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # --- Toolbars ---
+        # --- Toolbars (Keep existing toolbar code as is) ---
         # File Management Toolbar
         self.fileToolBar = QtWidgets.QToolBar("File Management", self)
         self.fileToolBar.setObjectName("fileToolBar")
         self.fileToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.fileToolBar)
-
-        # Define actions (ensure objectName is set for state handling)
-        self.actSelectFolder = QtWidgets.QAction("Select Folder", self)
-        self.actSelectFolder.setObjectName("actSelectFolder")
-        self.actSelectFolder.setToolTip("Select a folder to scan for music samples.")
-        self.actSelectFolder.triggered.connect(self.selectFolder)
-        self.fileToolBar.addAction(self.actSelectFolder)
-
-        self.actFindDuplicates = QtWidgets.QAction("Find Duplicates", self)
-        self.actFindDuplicates.setObjectName("actFindDuplicates")
-        self.actFindDuplicates.setToolTip("Find duplicate files based on size/hash.")
-        self.actFindDuplicates.triggered.connect(self.findDuplicates)
-        self.fileToolBar.addAction(self.actFindDuplicates)
-
-        # ... (Add other file toolbar actions: Open Folder, Delete Selected, Set Cubase) ...
-        actOpenFolder = QtWidgets.QAction("Open Folder", self)
-        actOpenFolder.setToolTip("Open the folder of the selected file.")
-        actOpenFolder.triggered.connect(self.openSelectedFileLocation)
-        self.fileToolBar.addAction(actOpenFolder)
-
-        actDeleteSelected = QtWidgets.QAction("Delete Selected", self)
-        actDeleteSelected.setToolTip("Delete selected file(s).")
-        actDeleteSelected.triggered.connect(self.deleteSelected)
-        self.fileToolBar.addAction(actDeleteSelected)
-
-        actSetCubase = QtWidgets.QAction("Set Cubase Folder", self)
-        actSetCubase.setToolTip("Set or change the Cubase integration folder.")
-        actSetCubase.triggered.connect(self.setCubaseFolder)
-        self.fileToolBar.addAction(actSetCubase)
-
-        leftExpSpacer = QtWidgets.QWidget(self)
-        leftExpSpacer.setSizePolicy(
-            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
-        )
-        self.fileToolBar.addWidget(leftExpSpacer)
-
-        self.progressBar = QtWidgets.QProgressBar(self)
-        self.progressBar.setValue(0)
-        self.progressBar.setFixedWidth(200)
-        progressAction = QtWidgets.QWidgetAction(self.fileToolBar)
-        progressAction.setDefaultWidget(self.progressBar)
-        self.fileToolBar.addAction(progressAction)
-
-        rightExpSpacer = QtWidgets.QWidget(self)
-        rightExpSpacer.setSizePolicy(
-            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
-        )
-        self.fileToolBar.addWidget(rightExpSpacer)
+        # ... (Add actions: actSelectFolder, actFindDuplicates, etc.) ...
+        self.actSelectFolder = QtWidgets.QAction("Select Folder", self); self.actSelectFolder.setObjectName("actSelectFolder"); self.actSelectFolder.triggered.connect(self.selectFolder); self.fileToolBar.addAction(self.actSelectFolder)
+        self.actFindDuplicates = QtWidgets.QAction("Find Duplicates", self); self.actFindDuplicates.setObjectName("actFindDuplicates"); self.actFindDuplicates.triggered.connect(self.findDuplicates); self.fileToolBar.addAction(self.actFindDuplicates)
+        actOpenFolder = QtWidgets.QAction("Open Folder", self); actOpenFolder.triggered.connect(self.openSelectedFileLocation); self.fileToolBar.addAction(actOpenFolder)
+        actDeleteSelected = QtWidgets.QAction("Delete Selected", self); actDeleteSelected.setObjectName("actDeleteSelected"); actDeleteSelected.triggered.connect(self.deleteSelected); self.fileToolBar.addAction(actDeleteSelected)
+        actSetCubase = QtWidgets.QAction("Set Cubase Folder", self); actSetCubase.triggered.connect(self.setCubaseFolder); self.fileToolBar.addAction(actSetCubase)
+        leftExpSpacer = QtWidgets.QWidget(self); leftExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); self.fileToolBar.addWidget(leftExpSpacer)
+        self.progressBar = QtWidgets.QProgressBar(self); self.progressBar.setValue(0); self.progressBar.setFixedWidth(200); progressAction = QtWidgets.QWidgetAction(self.fileToolBar); progressAction.setDefaultWidget(self.progressBar); self.fileToolBar.addAction(progressAction)
+        rightExpSpacer = QtWidgets.QWidget(self); rightExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); self.fileToolBar.addWidget(rightExpSpacer)
 
         # Audio Tools Toolbar
         self.audioToolBar = QtWidgets.QToolBar("Audio Tools", self)
         self.audioToolBar.setObjectName("audioToolBar")
         self.audioToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.audioToolBar)
+        # ... (Add actions: actPreview, actStopPreview, actWaveform, actWaveformPlayer, actAutoTag, actEditTags, actAnalyzeLibrary, actViewFeatures, actRecommend, actSendToCubase) ...
+        actPreview = QtWidgets.QAction("Preview", self); actPreview.triggered.connect(self.previewSelected); self.audioToolBar.addAction(actPreview)
+        self.actStopPreview = QtWidgets.QAction("Stop", self); self.actStopPreview.setObjectName("actStopPreview"); self.actStopPreview.triggered.connect(self.stopPreview); self.audioToolBar.addAction(self.actStopPreview)
+        actWaveform = QtWidgets.QAction("Waveform", self); actWaveform.triggered.connect(self.waveformPreview); self.audioToolBar.addAction(actWaveform)
+        actWaveformPlayer = QtWidgets.QAction("Waveform Player", self); actWaveformPlayer.triggered.connect(self.launchWaveformPlayer); self.audioToolBar.addAction(actWaveformPlayer)
+        spacer2 = QtWidgets.QWidget(self); spacer2.setFixedWidth(15); self.audioToolBar.addWidget(spacer2)
+        actAutoTag = QtWidgets.QAction("Auto Tag", self); actAutoTag.triggered.connect(self.autoTagFiles); self.audioToolBar.addAction(actAutoTag)
+        actEditTags = QtWidgets.QAction("Edit Tags", self); actEditTags.setObjectName("actEditTags"); actEditTags.triggered.connect(self.editTagsForSelectedFile); self.audioToolBar.addAction(actEditTags)
+        self.actAnalyzeLibrary = QtWidgets.QAction("Analyze Library", self); self.actAnalyzeLibrary.setObjectName("actAnalyzeLibrary"); self.actAnalyzeLibrary.triggered.connect(self.runAdvancedAnalysis); self.audioToolBar.addAction(self.actAnalyzeLibrary)
+        self.actViewFeatures = QtWidgets.QAction("View Features", self); self.actViewFeatures.setObjectName("actViewFeatures"); self.actViewFeatures.triggered.connect(self.viewSelectedFileFeatures); self.audioToolBar.addAction(self.actViewFeatures)
+        self.actRecommend = QtWidgets.QAction("Recommend", self); self.actRecommend.setObjectName("actRecommend"); self.actRecommend.triggered.connect(self.recommendSimilarSamples); self.audioToolBar.addAction(self.actRecommend)
+        actSendToCubase = QtWidgets.QAction("Send to Cubase", self); actSendToCubase.triggered.connect(self.sendToCubase); self.audioToolBar.addAction(actSendToCubase)
 
-        # Define actions (ensure objectName is set for state handling)
-        actPreview = QtWidgets.QAction("Preview", self)
-        actPreview.setToolTip("Preview the selected audio file.")
-        actPreview.triggered.connect(self.previewSelected)
-        self.audioToolBar.addAction(actPreview)
-
-        self.actStopPreview = QtWidgets.QAction("Stop", self)
-        self.actStopPreview.setObjectName("actStopPreview")  # Set object name
-        self.actStopPreview.setToolTip(
-            "Stop audio playback or cancel active operation."
-        )
-        self.actStopPreview.triggered.connect(self.stopPreview)
-        self.audioToolBar.addAction(self.actStopPreview)
-
-        # ... (Add other audio toolbar actions: Waveform, WaveformPlayer, Auto Tag, Edit Tags) ...
-        actWaveform = QtWidgets.QAction("Waveform", self)
-        actWaveform.setToolTip("View the waveform of the selected audio file.")
-        actWaveform.triggered.connect(self.waveformPreview)
-        self.audioToolBar.addAction(actWaveform)
-
-        actWaveformPlayer = QtWidgets.QAction("Waveform Player", self)
-        actWaveformPlayer.setToolTip("Launch waveform player with integrated playback.")
-        actWaveformPlayer.triggered.connect(self.launchWaveformPlayer)
-        self.audioToolBar.addAction(actWaveformPlayer)
-
-        spacer2 = QtWidgets.QWidget(self)
-        spacer2.setFixedWidth(15)
-        self.audioToolBar.addWidget(spacer2)
-
-        actAutoTag = QtWidgets.QAction("Auto Tag", self)
-        actAutoTag.setToolTip("Automatically tag files (BPM & Key detection).")
-        actAutoTag.triggered.connect(self.autoTagFiles)
-        self.audioToolBar.addAction(actAutoTag)
-
-        actEditTags = QtWidgets.QAction("Edit Tags", self)
-        actEditTags.setToolTip("Edit tags using the multi-dimensional tag editor.")
-        actEditTags.triggered.connect(self.editTagsForSelectedFile)
-        self.audioToolBar.addAction(actEditTags)
-
-        self.actAnalyzeLibrary = QtWidgets.QAction("Analyze Library", self)
-        self.actAnalyzeLibrary.setObjectName("actAnalyzeLibrary")
-        self.actAnalyzeLibrary.setToolTip(
-            "Perform advanced audio analysis on the library."
-        )
-        self.actAnalyzeLibrary.triggered.connect(self.runAdvancedAnalysis)
-        self.audioToolBar.addAction(self.actAnalyzeLibrary)
-
-        # --- Add View Features Action ---
-        self.actViewFeatures = QtWidgets.QAction("View Features", self)
-        self.actViewFeatures.setObjectName("actViewFeatures")
-        self.actViewFeatures.setToolTip("View detailed audio features for the selected file.")
-        self.actViewFeatures.triggered.connect(self.viewSelectedFileFeatures)
-        self.audioToolBar.addAction(self.actViewFeatures)
-        # --- End View Features Action ---
-
-        # ... (Add Recommend, Send to Cubase actions) ...
-        self.actRecommend = QtWidgets.QAction("Recommend", self)
-        self.actRecommend.setObjectName("actRecommend")
-        self.actRecommend.setToolTip("Recommend similar samples based on BPM or tags.")
-        self.actRecommend.triggered.connect(self.recommendSimilarSamples)
-        self.audioToolBar.addAction(self.actRecommend)
-
-        actSendToCubase = QtWidgets.QAction("Send to Cubase", self)
-        actSendToCubase.setToolTip("Send selected file(s) to the Cubase folder.")
-        actSendToCubase.triggered.connect(self.sendToCubase)
-        self.audioToolBar.addAction(actSendToCubase)
 
         # --- Layout Setup ---
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
         left_panel = QtWidgets.QWidget(self)
         left_layout = QtWidgets.QVBoxLayout(left_panel)
         left_layout.setContentsMargins(8, 8, 8, 8)
-        left_layout.setSpacing(10)
+        left_layout.setSpacing(10) # Increase spacing slightly
 
         # --- Filter Controls ---
+        filter_group_box = QtWidgets.QGroupBox("Filters") # Group filters
+        filter_layout = QtWidgets.QVBoxLayout(filter_group_box)
+        filter_layout.setSpacing(8)
+
         # Filename Filter
-        lblFilter = QtWidgets.QLabel("Filter by Name:", self)
-        self.txtFilter = QtWidgets.QLineEdit(self)
-        self.txtFilter.setPlaceholderText("Type to filter files...")
-        left_layout.addWidget(lblFilter)
-        left_layout.addWidget(self.txtFilter)
+        lblFilter = QtWidgets.QLabel("Name Contains:", filter_group_box)
+        self.txtFilter = QtWidgets.QLineEdit(filter_group_box)
+        self.txtFilter.setPlaceholderText("Type to filter filenames...")
+        filter_layout.addWidget(lblFilter)
+        filter_layout.addWidget(self.txtFilter)
 
-        # Key Filter (New)
-        lblKeyFilter = QtWidgets.QLabel("Filter by Key:", self)
-        self.comboKeyFilter = QtWidgets.QComboBox(self)
-        keys = [
-            "Any",
-            "C",
-            "Cm",
-            "C#",
-            "C#m",
-            "Db",
-            "Dbm",
-            "D",
-            "Dm",
-            "D#",
-            "D#m",
-            "Eb",
-            "Ebm",
-            "E",
-            "Em",
-            "F",
-            "Fm",
-            "F#",
-            "F#m",
-            "Gb",
-            "Gbm",
-            "G",
-            "Gm",
-            "G#",
-            "G#m",
-            "Ab",
-            "Abm",
-            "A",
-            "Am",
-            "A#",
-            "A#m",
-            "Bb",
-            "Bbm",
-            "B",
-            "Bm",
-            "N/A",
-        ]
+        # Key Filter
+        lblKeyFilter = QtWidgets.QLabel("Key:", filter_group_box)
+        self.comboKeyFilter = QtWidgets.QComboBox(filter_group_box)
+        keys = ["Any", "C", "Cm", "C#", "C#m", "Db", "Dbm", "D", "Dm", "D#", "D#m", "Eb", "Ebm", "E", "Em", "F", "Fm", "F#", "F#m", "Gb", "Gbm", "G", "Gm", "G#", "G#m", "Ab", "Abm", "A", "Am", "A#", "A#m", "Bb", "Bbm", "B", "Bm", "N/A"]
         self.comboKeyFilter.addItems(keys)
-        left_layout.addWidget(lblKeyFilter)
-        left_layout.addWidget(self.comboKeyFilter)
+        filter_layout.addWidget(lblKeyFilter)
+        filter_layout.addWidget(self.comboKeyFilter)
 
-        # BPM Filter (New)
-        lblBpmFilter = QtWidgets.QLabel("Filter by BPM Range:", self)
+        # BPM Filter
+        lblBpmFilter = QtWidgets.QLabel("BPM Range:", filter_group_box)
         bpm_layout = QtWidgets.QHBoxLayout()
-        self.spinBpmMin = QtWidgets.QSpinBox(self)
-        self.spinBpmMin.setRange(0, 500)
-        self.spinBpmMin.setSuffix(" Min")
-        self.spinBpmMin.setSpecialValueText("Any Min")
-        self.spinBpmMax = QtWidgets.QSpinBox(self)
-        self.spinBpmMax.setRange(0, 500)
-        self.spinBpmMax.setSuffix(" Max")
-        self.spinBpmMax.setSpecialValueText("Any Max")
-        bpm_layout.addWidget(self.spinBpmMin)
-        bpm_layout.addWidget(self.spinBpmMax)
-        left_layout.addWidget(lblBpmFilter)
-        left_layout.addLayout(bpm_layout)
+        self.spinBpmMin = QtWidgets.QSpinBox(filter_group_box)
+        self.spinBpmMin.setRange(0, 500); self.spinBpmMin.setSuffix(" Min"); self.spinBpmMin.setSpecialValueText("Any")
+        self.spinBpmMax = QtWidgets.QSpinBox(filter_group_box)
+        self.spinBpmMax.setRange(0, 500); self.spinBpmMax.setSuffix(" Max"); self.spinBpmMax.setSpecialValueText("Any")
+        # Default max BPM higher than min initially
+        self.spinBpmMax.setValue(500) # Set initial max high
+        bpm_layout.addWidget(self.spinBpmMin); bpm_layout.addWidget(self.spinBpmMax)
+        filter_layout.addWidget(lblBpmFilter)
+        filter_layout.addLayout(bpm_layout)
 
-        # Tag Text Filter (New)
-        lblTagTextFilter = QtWidgets.QLabel("Filter by Tag Text:", self)
-        self.txtTagTextFilter = QtWidgets.QLineEdit(self)
+        # Tag Text Filter
+        lblTagTextFilter = QtWidgets.QLabel("Tag Contains:", filter_group_box)
+        self.txtTagTextFilter = QtWidgets.QLineEdit(filter_group_box)
         self.txtTagTextFilter.setPlaceholderText("e.g., KICK, BRIGHT, LOOP...")
-        left_layout.addWidget(lblTagTextFilter)
-        left_layout.addWidget(self.txtTagTextFilter)
+        filter_layout.addWidget(lblTagTextFilter)
+        filter_layout.addWidget(self.txtTagTextFilter)
 
-        # Separator
-        line = QtWidgets.QFrame()
-        line.setFrameShape(QtWidgets.QFrame.HLine)
-        line.setFrameShadow(QtWidgets.QFrame.Sunken)
-        left_layout.addWidget(line)
+        # --- Add NEW Feature Filters ---
+        # Separator before new filters
+        line_features = QtWidgets.QFrame(filter_group_box)
+        line_features.setFrameShape(QtWidgets.QFrame.HLine); line_features.setFrameShadow(QtWidgets.QFrame.Sunken)
+        filter_layout.addWidget(line_features)
 
-        self.chkOnlyUnused = QtWidgets.QCheckBox("Show Only Unused Samples", self)
+        # LUFS Range Filter
+        lblLufsFilter = QtWidgets.QLabel("LUFS Range:", filter_group_box)
+        lufs_layout = QtWidgets.QHBoxLayout()
+        self.lufs_min_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
+        self.lufs_min_spinbox.setRange(-70.0, 0.0) # Realistic LUFS range
+        self.lufs_min_spinbox.setDecimals(1)
+        self.lufs_min_spinbox.setSingleStep(0.5)
+        self.lufs_min_spinbox.setSuffix(" Min")
+        self.lufs_min_spinbox.setSpecialValueText("Any") # Use special value text
+        self.lufs_min_spinbox.setValue(self.lufs_min_spinbox.minimum()) # Default to min
+        self.lufs_max_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
+        self.lufs_max_spinbox.setRange(-70.0, 0.0)
+        self.lufs_max_spinbox.setDecimals(1)
+        self.lufs_max_spinbox.setSingleStep(0.5)
+        self.lufs_max_spinbox.setSuffix(" Max")
+        self.lufs_max_spinbox.setSpecialValueText("Any") # Use special value text
+        self.lufs_max_spinbox.setValue(self.lufs_max_spinbox.maximum()) # Default to max
+        lufs_layout.addWidget(self.lufs_min_spinbox)
+        lufs_layout.addWidget(self.lufs_max_spinbox)
+        filter_layout.addWidget(lblLufsFilter)
+        filter_layout.addLayout(lufs_layout)
+
+        # Bit Depth Filter
+        lblBitDepthFilter = QtWidgets.QLabel("Bit Depth:", filter_group_box)
+        self.bit_depth_combobox = QtWidgets.QComboBox(filter_group_box)
+        # Add common bit depths, ensure "Any" is first
+        self.bit_depth_combobox.addItems(["Any", "16", "24", "32", "8"]) # Order as desired
+        filter_layout.addWidget(lblBitDepthFilter)
+        filter_layout.addWidget(self.bit_depth_combobox)
+
+        # Pitch Hz Range Filter
+        lblPitchFilter = QtWidgets.QLabel("Pitch Range (Hz):", filter_group_box)
+        pitch_layout = QtWidgets.QHBoxLayout()
+        self.pitch_min_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
+        self.pitch_min_spinbox.setRange(0.0, 20000.0) # Wide range for pitch
+        self.pitch_min_spinbox.setDecimals(1)
+        self.pitch_min_spinbox.setSingleStep(10.0)
+        self.pitch_min_spinbox.setSuffix(" Hz Min")
+        self.pitch_min_spinbox.setSpecialValueText("Any")
+        self.pitch_min_spinbox.setValue(self.pitch_min_spinbox.minimum())
+        self.pitch_max_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
+        self.pitch_max_spinbox.setRange(0.0, 20000.0)
+        self.pitch_max_spinbox.setDecimals(1)
+        self.pitch_max_spinbox.setSingleStep(10.0)
+        self.pitch_max_spinbox.setSuffix(" Hz Max")
+        self.pitch_max_spinbox.setSpecialValueText("Any")
+        self.pitch_max_spinbox.setValue(self.pitch_max_spinbox.maximum())
+        pitch_layout.addWidget(self.pitch_min_spinbox)
+        pitch_layout.addWidget(self.pitch_max_spinbox)
+        filter_layout.addWidget(lblPitchFilter)
+        filter_layout.addLayout(pitch_layout)
+
+        # Attack Time Range Filter
+        lblAttackFilter = QtWidgets.QLabel("Attack Time Range (ms):", filter_group_box)
+        attack_layout = QtWidgets.QHBoxLayout()
+        self.attack_min_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
+        self.attack_min_spinbox.setRange(0.0, 10000.0) # e.g., 0 to 10 seconds in ms
+        self.attack_min_spinbox.setDecimals(1)
+        self.attack_min_spinbox.setSingleStep(1.0)
+        self.attack_min_spinbox.setSuffix(" ms Min")
+        self.attack_min_spinbox.setSpecialValueText("Any")
+        self.attack_min_spinbox.setValue(self.attack_min_spinbox.minimum())
+        self.attack_max_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
+        self.attack_max_spinbox.setRange(0.0, 10000.0)
+        self.attack_max_spinbox.setDecimals(1)
+        self.attack_max_spinbox.setSingleStep(1.0)
+        self.attack_max_spinbox.setSuffix(" ms Max")
+        self.attack_max_spinbox.setSpecialValueText("Any")
+        self.attack_max_spinbox.setValue(self.attack_max_spinbox.maximum())
+        attack_layout.addWidget(self.attack_min_spinbox)
+        attack_layout.addWidget(self.attack_max_spinbox)
+        filter_layout.addWidget(lblAttackFilter)
+        filter_layout.addLayout(attack_layout)
+
+        # Add the filter group box to the main left layout
+        left_layout.addWidget(filter_group_box)
+
+        # --- Other Left Panel Controls ---
+        other_controls_group_box = QtWidgets.QGroupBox("Options") # Group options
+        other_controls_layout = QtWidgets.QVBoxLayout(other_controls_group_box)
+
+        self.chkOnlyUnused = QtWidgets.QCheckBox("Show Only Unused Samples", other_controls_group_box)
         self.chkOnlyUnused.setChecked(False)
-        left_layout.addWidget(self.chkOnlyUnused)
+        other_controls_layout.addWidget(self.chkOnlyUnused)
 
         sizeUnitLayout = QtWidgets.QHBoxLayout()
-        lblSizeUnit = QtWidgets.QLabel("Size Unit:", self)
-        self.comboSizeUnit = QtWidgets.QComboBox(self)
+        lblSizeUnit = QtWidgets.QLabel("Size Unit:", other_controls_group_box)
+        self.comboSizeUnit = QtWidgets.QComboBox(other_controls_group_box)
         self.comboSizeUnit.addItems(["KB", "MB", "GB"])
         sizeUnitLayout.addWidget(lblSizeUnit)
         sizeUnitLayout.addWidget(self.comboSizeUnit)
-        left_layout.addLayout(sizeUnitLayout)
+        other_controls_layout.addLayout(sizeUnitLayout)
 
-        self.chkRecycleBin = QtWidgets.QCheckBox("Use Recycle Bin (on Delete)", self)
+        self.chkRecycleBin = QtWidgets.QCheckBox("Use Recycle Bin (on Delete)", other_controls_group_box)
         self.chkRecycleBin.setChecked(True)
-        left_layout.addWidget(self.chkRecycleBin)
-        left_layout.addStretch()
+        other_controls_layout.addWidget(self.chkRecycleBin)
+
+        left_layout.addWidget(other_controls_group_box)
+        left_layout.addStretch() # Pushes controls up
+
         splitter.addWidget(left_panel)
 
-        # --- Right Panel (Table View) ---
+        # --- Right Panel (Table View - Keep existing setup) ---
         right_panel = QtWidgets.QWidget(self)
         right_layout = QtWidgets.QVBoxLayout(right_panel)
         right_layout.setContentsMargins(8, 8, 8, 8)
         right_layout.setSpacing(5)
 
-        # Create models here
+        # Create models (use the corrected FileTableModel from previous step)
         self.model = FileTableModel([], self.size_unit)
-        self.proxyModel = FileFilterProxyModel(self)  # Use updated proxy model
+        self.proxyModel = FileFilterProxyModel(self)
         self.proxyModel.setSourceModel(self.model)
 
         self.tableView = QtWidgets.QTableView(self)
         self.tableView.setModel(self.proxyModel)
+        # ... (keep existing tableView settings: sorting, selection, headers, etc.) ...
         self.tableView.setSortingEnabled(True)
         self.tableView.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.tableView.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        # Ensure selection changes re-evaluate action states (e.g. View Features button)
-        self.tableView.selectionModel().selectionChanged.connect(
-            lambda selected, deselected: self._update_ui_state()
-        )
+        self.tableView.selectionModel().selectionChanged.connect(lambda: self._update_ui_state())
         self.tableView.verticalHeader().setVisible(False)
-        self.tableView.horizontalHeader().setStretchLastSection(True)
-        # self.tableView.resizeColumnsToContents() # Resize after data load?
+        self.tableView.horizontalHeader().setStretchLastSection(True) # Keep last column (Tags) stretching
 
         right_layout.addWidget(self.tableView)
         self.labelSummary = QtWidgets.QLabel("Scanned 0 files.", self)
         right_layout.addWidget(self.labelSummary)
         splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 3)
+        splitter.setStretchFactor(0, 1) # Adjust stretch factor if needed (Left panel)
+        splitter.setStretchFactor(1, 3) # Adjust stretch factor if needed (Right panel)
         main_layout.addWidget(splitter)
 
-        # --- Status Bar and Menu Bar ---
+        # --- Status Bar and Menu Bar (Keep existing setup) ---
         self.setStatusBar(QtWidgets.QStatusBar(self))
         menuBar = self.menuBar()
-        helpMenu = menuBar.addMenu("Help")
-        helpAction = QtWidgets.QAction("Usage Help", self)
-        helpAction.triggered.connect(self.showHelpDialog)
-        helpMenu.addAction(helpAction)
-        themeMenu = menuBar.addMenu("Theme")
-        actLight = QtWidgets.QAction("Light Mode", self)
-        actLight.triggered.connect(lambda: self.setTheme("light", save=True))
-        themeMenu.addAction(actLight)
-        actDark = QtWidgets.QAction("Dark Mode", self)
-        actDark.triggered.connect(lambda: self.setTheme("dark", save=True))
-        themeMenu.addAction(actDark)
+        helpMenu = menuBar.addMenu("Help"); helpAction = QtWidgets.QAction("Usage Help", self); helpAction.triggered.connect(self.showHelpDialog); helpMenu.addAction(helpAction)
+        themeMenu = menuBar.addMenu("Theme"); actLight = QtWidgets.QAction("Light Mode", self); actLight.triggered.connect(lambda: self.setTheme("light", save=True)); themeMenu.addAction(actLight); actDark = QtWidgets.QAction("Dark Mode", self); actDark.triggered.connect(lambda: self.setTheme("dark", save=True)); themeMenu.addAction(actDark)
 
-        # --- Connect Filter UI Signals ---
+
+        # --- Connect Filter UI Signals (Consolidated at end of initUI) ---
+        # Standard Filters
         self.txtFilter.textChanged.connect(self._start_name_filter_timer)
         self.chkOnlyUnused.stateChanged.connect(self.on_unused_filter_changed)
         self.comboSizeUnit.currentIndexChanged.connect(self.on_size_unit_changed)
-        self.comboKeyFilter.currentIndexChanged.connect(self.on_key_filter_changed)
-        self.spinBpmMin.valueChanged.connect(self.on_bpm_filter_changed)
-        self.spinBpmMax.valueChanged.connect(self.on_bpm_filter_changed)
+        self.comboKeyFilter.activated[str].connect(self.proxyModel.set_filter_key) # Direct connect
+        self.spinBpmMin.valueChanged.connect(self._update_bpm_filter) # Use helper slot
+        self.spinBpmMax.valueChanged.connect(self._update_bpm_filter) # Use helper slot
         self.txtTagTextFilter.textChanged.connect(self._start_tag_text_filter_timer)
+
+        # --- Connect NEW Feature Filter Signals ---
+        self.lufs_min_spinbox.valueChanged[float].connect(self._update_lufs_filter)
+        self.lufs_max_spinbox.valueChanged[float].connect(self._update_lufs_filter)
+        self.bit_depth_combobox.activated[str].connect(self._update_bit_depth_filter)
+        self.pitch_min_spinbox.valueChanged[float].connect(self._update_pitch_hz_filter)
+        self.pitch_max_spinbox.valueChanged[float].connect(self._update_pitch_hz_filter)
+        # Use valueChanged (emits float) for attack time spinboxes
+        self.attack_min_spinbox.valueChanged.connect(self._update_attack_time_filter)
+        self.attack_max_spinbox.valueChanged.connect(self._update_attack_time_filter)
 
         # --- Connect Debounce Timers ---
         self.nameFilterTimer.timeout.connect(self.on_name_filter_apply)
@@ -936,6 +892,17 @@ class MainWindow(QtWidgets.QMainWindow):
             QMessageBox.warning(self, "View Features", "Could not retrieve data for the selected file.")
             return
 
+        # +++ START DEBUG LOGGING +++
+        logger.debug("--- Retrieved file_info for FeatureViewDialog ---")
+        # Log a few key standard and advanced features to check their presence/values
+        log_features = ['path', 'bpm', 'brightness', 'loudness_rms', 'loudness_lufs', 'pitch_hz', 'attack_time', 'bit_depth']
+        logged_data = {key: file_info.get(key) for key in log_features if key in file_info}
+        logger.debug(f"Data subset: {logged_data}")
+        # Optionally log all keys to see what's available:
+        # logger.debug(f"All keys in file_info: {list(file_info.keys())}")
+        # +++ END DEBUG LOGGING +++
+
+
         # 3. Check if features likely exist (e.g., check one feature)
         # This assumes analysis has been run. A better check might be needed.
         if file_info.get('brightness') is None and file_info.get('loudness_rms') is None:
@@ -1186,40 +1153,96 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @pyqtSlot(list)
     def onAdvancedAnalysisFinished(self, updated_files: List[Dict[str, Any]]) -> None:
-        """Handles finished signal from AnalysisController."""
+        """
+        Handles finished signal from AnalysisController.
+        Ensures all file dictionaries have expected feature keys before updating the model.
+        Updates the main model with results and triggers stats update ONLY IF
+        the analysis task was NOT cancelled.
+        """
         logger.info("Advanced analysis finished signal received.")
+        # Import the master list of feature keys
+        try:
+            from config.settings import ALL_FEATURE_KEYS
+        except ImportError:
+            logger.error("Cannot import ALL_FEATURE_KEYS from settings. Unable to ensure data consistency.")
+            # Handle error appropriately - maybe return or use a fallback
+            QMessageBox.critical(self, "Configuration Error", "Could not load feature key definitions.")
+            return
 
-        # --- 1) Update UI with the new analysis results ---
+
+        # --- CRITICAL CHECK: Use the controller's cancellation flag ---
+        if self.anal_ctrl.was_cancelled():
+            logger.info("Analysis task was cancelled (flag detected). Skipping statistics update.")
+            self.statusBar().showMessage("Analysis cancelled by user.", 5000)
+            # Even if cancelled, try to ensure data consistency for partial results
+            self.all_files_info = updated_files # Use the potentially partial results
+
+            # --- Ensure Keys Exist (Apply even on cancel for consistency) ---
+            logger.debug("Ensuring all feature keys exist in results after cancelled analysis...")
+            for file_info in self.all_files_info:
+                if isinstance(file_info, dict): # Check it's a dict
+                    for key in ALL_FEATURE_KEYS:
+                        if key not in file_info:
+                            file_info[key] = None # Add missing keys with None
+            logger.debug("Key consistency check complete for cancelled results.")
+            # --- End Key Check ---
+
+            self.model.updateData(self.all_files_info)
+            self.updateSummaryLabel()
+            self.progressBar.setValue(0)
+            return
+
+        # --- If NOT Cancelled, Proceed ---
+        logger.info("Analysis completed successfully. Ensuring keys, updating model, triggering statistics.")
         self.progressBar.setValue(100)
-        self.all_files_info = updated_files
-        self.model.updateData(self.all_files_info)
+        self.all_files_info = updated_files # Assign results
+
+        # +++ START Ensure Keys Exist +++
+        logger.debug("Ensuring all feature keys exist in successfully completed analysis results...")
+        missing_keys_added_count = 0
+        for file_info in self.all_files_info:
+            if isinstance(file_info, dict): # Check it's a dict
+                for key in ALL_FEATURE_KEYS:
+                    if key not in file_info:
+                        file_info[key] = None # Add missing keys with None
+                        missing_keys_added_count += 1
+            else:
+                 logger.warning(f"Item in updated_files is not a dictionary: {file_info}")
+        if missing_keys_added_count > 0:
+             logger.info(f"Added {missing_keys_added_count} missing feature keys with None value for consistency.")
+        logger.debug("Key consistency check complete.")
+        # +++ END Ensure Keys Exist +++
+
+        # 1) Update UI with the *consistent* analysis results
+        self.model.updateData(self.all_files_info) # Update model AFTER ensuring keys
         self.updateSummaryLabel()
-        self.statusBar().showMessage("Analysis complete. Starting statistics update...")
+        self.statusBar().showMessage("Analysis complete. Refreshing feature statistics...", 0)
+        logger.info("Main model updated after analysis and key check. Preparing stats worker.")
 
-        # --- 2) Clear stale stats flag if worker died or never started ---
+        # --- Start StatsWorker (rest of the code remains the same) ---
         if self._is_calculating_stats and (not self.stats_worker or not self.stats_worker.isRunning()):
-            logger.warning("Stale stats flag detected; resetting before starting fresh.")
+            logger.warning("Stale stats flag detected before starting new worker; resetting.")
             self._is_calculating_stats = False
-            self._update_ui_state()
 
-        # --- 3) Guard against real simultaneous runs ---
         if self._is_calculating_stats:
-            logger.warning("Statistics calculation already in progress. Skipping trigger.")
+            logger.warning("Statistics calculation already in progress (_is_calculating_stats=True). Skipping new trigger.")
+            self.statusBar().showMessage("Analysis complete. Statistics update already running.", 5000)
+            self._update_ui_state()
             return
         if self.stats_worker and self.stats_worker.isRunning():
-            logger.warning("StatsWorker already running. Skipping trigger.")
+            logger.warning("StatsWorker instance is unexpectedly still running. Skipping new trigger.")
+            self.statusBar().showMessage("Analysis complete. Statistics update already running.", 5000)
+            self._update_ui_state()
             return
 
-        # --- 4) Instantiate, connect, flag, and start StatsWorker ---
         logger.info("Creating and starting StatsWorker thread for statistics refresh.")
         self.stats_worker = StatsWorker(self)
         self.stats_worker.finished.connect(self.onStatsWorkerFinished)
-
         self._is_calculating_stats = True
         logger.debug("_is_calculating_stats set to True.")
         self._update_ui_state()
-
         self.stats_worker.start()
+        logger.info("StatsWorker thread started.")
 
 
 
@@ -1457,7 +1480,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if delete_action: delete_action.setEnabled(can_operate_on_selection)
         if preview_action: preview_action.setEnabled(can_operate_on_selection)
         if send_cubase_action: send_cubase_action.setEnabled(can_operate_on_selection and bool(self.cubase_folder))
-        if edit_tags_action: edit_tags_action.setEnabled(can_operate_on_single_selection)
+        if edit_tags_action: edit_tags_action.setEnabled(can_operate_on_selection)
         recommend_action.setEnabled(
             (not is_controller_busy)
             and (not is_stats_busy)
@@ -1515,6 +1538,102 @@ class MainWindow(QtWidgets.QMainWindow):
              # If already showing permanent 'Ready.', don't flash it temporarily
              pass
 
+    # --- Helper Methods to Update NEW Feature Filters ---
+
+    @pyqtSlot()
+    def _update_lufs_filter(self) -> None:
+        """
+        Reads min/max LUFS spinboxes and updates the proxy model.
+        Robustly handles 'Any' state by checking against min/max values.
+        """
+        if not hasattr(self, 'lufs_min_spinbox') or not hasattr(self, 'lufs_max_spinbox'):
+             logger.warning("LUFS spinboxes not available for filter update.")
+             return
+
+        min_val = self.lufs_min_spinbox.value()
+        max_val = self.lufs_max_spinbox.value()
+
+        # Determine if filter boundary should be active (None means inactive/"Any")
+        # Consider boundary inactive if value is AT the minimum or maximum
+        min_lufs = None if min_val == self.lufs_min_spinbox.minimum() else min_val
+        max_lufs = None if max_val == self.lufs_max_spinbox.maximum() else max_val
+
+        # Basic validation: ensure min <= max if both are active
+        if min_lufs is not None and max_lufs is not None and min_lufs > max_lufs:
+            # If min > max, we could arguably disable the filter or sync values.
+            # For simplicity, we pass them; the filter logic should handle empty result.
+            logger.debug(f"Invalid LUFS range: Min ({min_lufs}) > Max ({max_lufs}). Filter likely yields no results.")
+
+        self.proxyModel.set_filter_lufs_range(min_lufs, max_lufs)
+
+    @pyqtSlot(str) # Connected to activated[str] signal
+    def _update_bit_depth_filter(self, selected_text: str):
+        """Reads the Bit Depth combobox and updates the proxy model."""
+        if selected_text == "Any":
+            bit_depth = None
+        else:
+            try:
+                bit_depth = int(selected_text)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid bit depth selection: {selected_text}")
+                bit_depth = None # Default to no filter if conversion fails
+
+        self.proxyModel.set_filter_bit_depth(bit_depth)
+
+    @pyqtSlot()
+    def _update_pitch_hz_filter(self):
+        """Reads min/max Pitch Hz spinboxes and updates the proxy model."""
+        if not hasattr(self, 'pitch_min_spinbox') or not hasattr(self, 'pitch_max_spinbox'):
+             logger.warning("Pitch Hz spinboxes not available for filter update.")
+             return
+
+        min_val = self.pitch_min_spinbox.value()
+        max_val = self.pitch_max_spinbox.value()
+
+        min_hz = None if self.pitch_min_spinbox.text() == self.pitch_min_spinbox.specialValueText() else min_val
+        max_hz = None if self.pitch_max_spinbox.text() == self.pitch_max_spinbox.specialValueText() else max_val
+
+        if min_hz is not None and max_hz is not None and min_hz > max_hz:
+            logger.debug(f"Invalid Pitch Hz range: Min ({min_hz}) > Max ({max_hz}). Passing as is.")
+
+        self.proxyModel.set_filter_pitch_hz_range(min_hz, max_hz)
+
+    @pyqtSlot() # Connected to valueChanged signal
+    def _update_attack_time_filter(self):
+        """Reads min/max Attack Time (ms) spinboxes and updates the proxy model."""
+        if not hasattr(self, 'attack_min_spinbox') or not hasattr(self, 'attack_max_spinbox'):
+             logger.warning("Attack Time spinboxes not available for filter update.")
+             return
+
+        min_val_ms = self.attack_min_spinbox.value()
+        max_val_ms = self.attack_max_spinbox.value()
+
+        # Use special value text check for disabling filter boundary
+        min_ms = None if self.attack_min_spinbox.text() == self.attack_min_spinbox.specialValueText() else min_val_ms
+        max_ms = None if self.attack_max_spinbox.text() == self.attack_max_spinbox.specialValueText() else max_val_ms
+
+        # Basic validation
+        if min_ms is not None and max_ms is not None and min_ms > max_ms:
+            logger.debug(f"Invalid Attack Time range: Min ({min_ms}ms) > Max ({max_ms}ms). Passing as is.")
+
+        # Pass values in ms to the setter (it handles conversion to seconds)
+        self.proxyModel.set_filter_attack_time_range(min_ms, max_ms)
+
+    # --- Keep existing helper methods like _update_bpm_filter ---
+    # Make sure _update_bpm_filter also uses specialValueText if you updated the spinboxes
+    def _update_bpm_filter(self):
+        """Reads min/max BPM spinboxes and updates the proxy model."""
+        if hasattr(self, 'spinBpmMin') and hasattr(self, 'spinBpmMax'):
+            min_val = self.spinBpmMin.value()
+            max_val = self.spinBpmMax.value()
+            min_bpm = None if min_val == self.spinBpmMin.minimum() else min_val
+            max_bpm = None if max_val == self.spinBpmMax.maximum() else max_val
+
+            if min_bpm is not None and max_bpm is not None and min_bpm > max_bpm:
+                logger.debug(f"Invalid BPM range: Min ({min_bpm}) > Max ({max_bpm}). Passing as is.")
+
+            self.proxyModel.set_filter_bpm_range(min_bpm, max_bpm)
+
     # --- Theme and Help Methods ---
     def setTheme(self, theme: str, save: bool = True) -> None:
         self.theme = theme.lower()
@@ -1531,24 +1650,27 @@ class MainWindow(QtWidgets.QMainWindow):
         """Handles the finished signal from the StatsWorker thread."""
         logger.info(f"StatsWorker finished signal received: Success={success}, Msg='{message}'")
         try:
-            # Process results and show messages
+            # Show appropriate status message based on success
             if success:
                 self.statusBar().showMessage("Statistics update complete.", 5000)
+                logger.info("Feature statistics successfully refreshed.")
             else:
-                self.statusBar().showMessage("Statistics update failed.", 5000)
-                QMessageBox.warning(self, "Statistics Update Error", message)
+                # Show error message from worker, don't show generic "failed" message
+                self.statusBar().showMessage("Statistics update failed. See logs or dialog.", 5000)
+                QMessageBox.warning(self, "Statistics Update Error", f"Failed to update statistics:\n{message}")
+                logger.error(f"Statistics update failed: {message}")
         except Exception as e:
             logger.error(f"Error processing StatsWorker result message: {e}", exc_info=True)
         finally:
-            # This block executes reliably
+            # --- Crucial Cleanup ---
             logger.debug("Executing finally block in onStatsWorkerFinished.")
-            # --- CLEAR State Flag ---
+            # Clear the state flag *reliably*
             self._is_calculating_stats = False
             logger.debug("_is_calculating_stats set to False.")
-            # --- END State Flag ---
-            self.stats_worker = None # Clean up worker reference
+            # Clean up worker reference
+            self.stats_worker = None
             logger.debug("Set self.stats_worker = None.")
-            # Update the UI state AFTER clearing the flag
+            # Update the UI state *after* clearing the flag
             self._update_ui_state()
             logger.debug("Called _update_ui_state from onStatsWorkerFinished finally block.")
 

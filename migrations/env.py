@@ -1,122 +1,132 @@
-# ---> Keep imports and other setup at the top of env.py the same <---
-# (Ensure logging setup is present if you had it before)
-import os, sys
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, PROJECT_ROOT)
-
+# migrations/env.py
+import os
+import sys
 import logging
 from logging.config import fileConfig
+
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
 from alembic import context
-from sqlalchemy import engine_from_config, pool
-from sqlalchemy import MetaData, create_engine
 
-from config.settings import DB_FILENAME, ALL_FEATURE_KEYS
+# --- Project Setup ---
+# Add project root to sys.path to allow importing project modules
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+    print(f"Added project root to sys.path: {PROJECT_ROOT}") # Optional: confirm path
 
-logger = logging.getLogger(__name__)
-# logger.setLevel(logging.DEBUG) # Optional: keep for debugging
-
+# --- Alembic Config ---
 config = context.config
 
+# Interpret the config file for Python logging.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# point at your SQLite file
-engine = create_engine(f"sqlite:///{DB_FILENAME}")
- 
-# reflect the current DB into MetaData
-target_metadata = MetaData()
-target_metadata.reflect(bind=engine)
+# Setup basic logging if fileConfig fails or is not used
+logger = logging.getLogger('alembic.env')
+# logger.setLevel(logging.INFO) # Adjust level as needed
 
-# ---> Keep run_migrations_offline() function if you need it <---
+# --- Target Metadata ---
+# Import the MetaData object from your application's schema definition
+try:
+    # --->>> Ensure this import path 'services.schema' is correct <<<---
+    from services.schema import metadata as target_metadata
+    logger.info("Successfully imported target_metadata from services.schema")
+except ImportError as e:
+    logger.error(
+        f"Failed to import target_metadata from services.schema: {e}. "
+        "Check PYTHONPATH, sys.path modification, and file existence.",
+        exc_info=True
+    )
+    raise SystemExit("Failed to import target metadata from services.schema")
+
+# --- Migration Functions ---
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    # ... (keep existing offline implementation) ...
     url = config.get_main_option("sqlalchemy.url")
+    if not url:
+        logger.error("Database URL not configured in alembic.ini section [%s]", config.config_ini_section)
+        raise ValueError("Database URL must be configured under sqlalchemy.url")
+
+    logger.info(f"Running offline migrations with URL: {url}")
     context.configure(
         url=url,
-        target_metadata=target_metadata,
+        target_metadata=target_metadata, # Use imported metadata
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True,
+        compare_server_default=True,
+        render_as_batch=True, # <<< Enable batch mode for offline too
     )
+
+    logger.info("Beginning offline migration transaction.")
     with context.begin_transaction():
         context.run_migrations()
+    logger.info("Offline migrations finished.")
+
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-    Handles engine creation or uses connection from config attributes.
-    """
-    connectable = context.config.attributes.get("connection", None)
-    is_engine = False
-
-    if connectable is None:
-        # Standard behavior: create engine from config file
-        logger.info("No connection provided; creating engine from alembic.ini.")
+    """Run migrations in 'online' mode."""
+    # If tests or other callers passed in an existing engine/connection, use it
+    from sqlalchemy.engine import Engine
+    existing = config.attributes.get('connection', None)
+    if existing is not None:
+        logger.info("Using existing connection for Alembic migrations (from Config.attributes).")
+        # Determine if it's an Engine (needs .connect()) or already a Connection
+        if isinstance(existing, Engine):
+            conn = existing.connect()
+            close_conn = True
+        else:
+            conn = existing
+            close_conn = False
         try:
-            connectable = engine_from_config(
-                config.get_section(config.config_ini_section, {}),
-                prefix="sqlalchemy.",
-                poolclass=pool.NullPool,
-                url=config.get_main_option("sqlalchemy.url")
+            context.configure(
+                connection=conn,
+                target_metadata=target_metadata,
+                compare_type=True,
+                compare_server_default=True,
+                render_as_batch=True,
             )
-            is_engine = True
-        except Exception as e:
-            logger.error(f"Failed to create engine from config: {e}", exc_info=True)
-            raise
-    else:
-        # Use the connection passed via attributes (for testing)
-        # Check if it looks like an engine or a raw connection
-        if hasattr(connectable, 'connect') and callable(connectable.connect):
-            logger.info("Provided connectable appears to be an engine.")
-            is_engine = True
-        else:
-            logger.info("Provided connectable appears to be a raw DBAPI connection.")
-            is_engine = False
+            with context.begin_transaction():
+                context.run_migrations()
+            logger.info("Migrations applied successfully on provided connection.")
+        finally:
+            if close_conn:
+                conn.close()
+        return
 
-    # Get the actual connection object to use
-    db_connection = None
+    # Otherwise fall back to engine_from_config
     try:
-        if is_engine:
-            logger.info("Using engine to get connection for migrations.")
-            db_connection = connectable.connect()
-        else:
-            logger.info("Using provided raw DBAPI connection directly for migrations.")
-            db_connection = connectable # It's already the connection
-
-        # --- Configure and run within the connection context ---
-        # Pass the connection to context.configure
-        context.configure(
-            connection=db_connection,
-            target_metadata=target_metadata,
-            # Provide dialect_name ONLY if it's NOT an engine,
-            # otherwise let configure get it from the SQLAlchemy connection.
-            dialect_name="sqlite" if not is_engine else None,
-            # compare_type=True # Keep this if useful for SQLite type comparison
+        connectable = engine_from_config(
+            config.get_section(config.config_ini_section, {}),
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
         )
-
-        # Use Alembic's transaction context
-        with context.begin_transaction():
-            logger.info(f"Running migrations within Alembic transaction (is_engine={is_engine}).")
-            context.run_migrations()
-        logger.info("Migrations finished.")
-
     except Exception as e:
-        # Log the error clearly
-        logger.error(f"Exception during migration execution: {e}", exc_info=True)
-        # Re-raise the exception to ensure the test fails clearly
+        logger.error(f"Failed to create engine from Alembic config: {e}", exc_info=True)
         raise
-    finally:
-        # Close the connection *only* if we created it from an engine *here*
-        if is_engine and db_connection:
-            logger.info("Closing connection created from engine.")
-            db_connection.close()
-        elif not is_engine:
-            # If the connection was passed in (raw connection),
-            # leave it open - test teardown should handle it.
-            logger.info("Leaving provided raw DBAPI connection open.")
+
+    with connectable.connect() as connection:
+        logger.info(f"Established connection: {connection.engine.url}")
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True,
+            render_as_batch=True,
+        )
+        logger.info("Beginning migration transaction (batch mode enabled).")
+        with context.begin_transaction():
+            context.run_migrations()
+        logger.info("Migration transaction committed.")
+    logger.info("Online migrations finished successfully.")
 
 
-# ---> Ensure this block appears only ONCE at the very end <---
+# --- Main Execution Block ---
 if context.is_offline_mode():
+    logger.info("Running migrations in offline mode.")
     run_migrations_offline()
 else:
+    logger.info("Running migrations in online mode.")
     run_migrations_online()

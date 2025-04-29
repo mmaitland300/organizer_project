@@ -31,19 +31,24 @@ KEY_REGEX = re.compile(
     flags=re.IGNORECASE,
 )
 
-# --- Feature Toggles ---
-# Enable or disable specific auto-tagging sources
-ENABLE_FILENAME_TAGGING = True
-ENABLE_FOLDER_TAGGING = True
-# Content tagging depends on advanced analysis availability
-# (set after librosa import)
-ENABLE_CONTENT_TAGGING: bool  # defined later
+# --- BPM Detection Regex ---
+BPM_REGEX = re.compile(
+    # Matches common BPM patterns like "120bpm", "120 bpm", "120BPM", or just "120" if it looks like a BPM value
+    # Use \b for word boundaries to avoid matching parts of other numbers.
+    r"\b(?P<bpm>\d{2,3})\s?(?:bpm|BPM)?\b"
+)
+
+# --- Feature toggles ----------------------------------------------------
+ENABLE_ADVANCED_AUDIO_ANALYSIS = True     # used by tests and UI
+ENABLE_FILENAME_TAGGING        = True
+ENABLE_FOLDER_TAGGING          = True
+ENABLE_CONTENT_TAGGING: bool  # defined after dependency imports
 
 # --- Auto-Tagging Parameters ---
 AUTO_TAG_BPM_MAX_DURATION: float = 30.0  # seconds of audio to analyze per file
 
 # --- Filename Patterns for Auto-Tagging ---
-# Order is significant: first match wins for overlapping patterns
+# Order is significant for overlapping patterns
 FILENAME_TAG_PATTERNS: List[Tuple[str, Pattern[str]]] = [
     (
         "instrument",
@@ -69,17 +74,12 @@ FILENAME_TAG_PATTERNS: List[Tuple[str, Pattern[str]]] = [
 ]
 
 # --- Folder-Based Tagging Rules ---
-# Ignore common folder names via a single regex for performance
 _FOLDER_IGNORE_RE = re.compile(
     r"^(samples|library|libraries|audio|sound|sounds|packs|kits|collections|"
     r"sorted|processed|downloads|fx|misc|various|other|c|d|e|f|g|users|documents)$",
     re.IGNORECASE,
 )
-
-# Depth of folder ancestry to inspect for tags
 FOLDER_STRUCTURE_DEPTH: int = 4
-
-# Raw mapping from folder keyword to tag dimension
 _RAW_FOLDER_DIMENSION_MAP: Dict[str, str] = {
     'drums':    'category',
     'synth':    'category',
@@ -133,9 +133,9 @@ except ImportError:
     FigureCanvas = None
     np = None
 
-# Tie content tagging toggle to librosa availability
-ENABLE_CONTENT_TAGGING = (librosa is not None)
-# Waveform preview toggle
+# Set content tagging and waveform preview toggles
+enable_content = librosa is not None
+ENABLE_CONTENT_TAGGING = enable_content
 ENABLE_WAVEFORM_PREVIEW = bool(plt and np)
 
 # --- Audio Feature Constants ---
@@ -153,21 +153,40 @@ SPECTRAL_FEATURE_KEYS: List[str] = [
 
 MFCC_FEATURE_KEYS: List[str] = [f'mfcc{i+1}_mean' for i in range(N_MFCC)]
 
+ADDITIONAL_FEATURE_KEYS: List[str] = [
+    'bit_depth',
+    'loudness_lufs',
+    'pitch_hz',
+    'attack_time',
+]
 
-# --- Database Column Definitions ---
-# Each tuple: (column_name, display_name)
-FEATURE_DEFINITIONS: List[Tuple[str,str]] = [
+# --- Feature Definitions for Database and Display ---
+FEATURE_DEFINITIONS: List[Tuple[str, str]] = [
     ("brightness",           "Brightness (Spectral Centroid)"),
     ("loudness_rms",         "Loudness (RMS)"),
     ("zcr_mean",             "Zero-Crossing Rate"),
     ("spectral_contrast_mean","Spectral Contrast"),
-    *[(f"mfcc{i+1}_mean", f"MFCC {i+1}") for i in range(13)],
+    *[(f"mfcc{i+1}_mean", f"MFCC {i+1}") for i in range(N_MFCC)],
+    *[(key, key.replace('_', ' ').title()) for key in ADDITIONAL_FEATURE_KEYS],
 ]
 
-ALL_FEATURE_KEYS = [key for key, _ in FEATURE_DEFINITIONS]
-
-FEATURE_DISPLAY_NAMES = dict(FEATURE_DEFINITIONS)
+ALL_FEATURE_KEYS: List[str] = [key for key, _ in FEATURE_DEFINITIONS]
+FEATURE_DISPLAY_NAMES: Dict[str, str] = dict(FEATURE_DEFINITIONS)
 
 # Sanity check: display names cover all feature keys
 assert all(key in FEATURE_DISPLAY_NAMES for key in ALL_FEATURE_KEYS), \
     "Mismatch between ALL_FEATURE_KEYS and FEATURE_DISPLAY_NAMES"
+
+# --- Database column helpers -------------------------------------------
+# Base columns we persist (excluding autoupdated LAST_SCANNED)
+BASE_DB_COLUMNS = [
+    "file_path", "size", "mod_time", "duration", "bpm",
+    "file_key", "used", "samplerate", "channels", "tags",
+]
+
+# Public constant expected by tests/test_db_schema_sync.py
+ALL_SAVABLE_COLUMNS = (
+    BASE_DB_COLUMNS
+    + ALL_FEATURE_KEYS
+    + ["bit_depth", "loudness_lufs", "pitch_hz", "attack_time"]
+)
