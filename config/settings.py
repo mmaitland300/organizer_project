@@ -173,7 +173,15 @@ FEATURE_DEFINITIONS: List[Tuple[str, str]] = [
 
 ALL_FEATURE_KEYS: List[str] = [key for key, _ in FEATURE_DEFINITIONS]
 FEATURE_DISPLAY_NAMES: Dict[str, str] = dict(FEATURE_DEFINITIONS)
+# --- Spectrogram Settings ---
+# Defaults for STFT calculation
+STFT_N_FFT: int = 2048
+STFT_HOP_LENGTH: int = 512
+STFT_WIN_LENGTH: Optional[int] = None # Defaults to n_fft
+STFT_WINDOW: str = 'hann' # Default window function
 
+# Cache size for SpectrogramService (number of files/parameter sets)
+SPECTROGRAM_CACHE_SIZE: int = 128
 # Sanity check: display names cover all feature keys
 assert all(key in FEATURE_DISPLAY_NAMES for key in ALL_FEATURE_KEYS), \
     "Mismatch between ALL_FEATURE_KEYS and FEATURE_DISPLAY_NAMES"
