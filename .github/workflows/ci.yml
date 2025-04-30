@@ -1,49 +1,90 @@
+# Filename: .github/workflows/ci.yml
+# This version uses the correct matrix [3.9, 3.10, 3.11]
+
 name: CI
 
 on:
+  # Triggers the workflow on push events but only for the main branch and a specific version branch
   push:
-    branches: [ main, ver/1.3.0 ]
+    branches: [ main, ver/1.3.0 ] # Adjust branches as needed
+
+  # Triggers the workflow on pull request events targeted at the main branch
   pull_request:
     branches: [ main ]
 
 jobs:
   build:
+    # The type of runner that the job will run on
     runs-on: ubuntu-latest
+
+    # Use a matrix strategy to run jobs for multiple Python versions
     strategy:
+      fail-fast: false # Optional: Set to true to cancel all jobs if one fails
       matrix:
+        # Define the Python versions to test against
+        # Ensure these are versions supported by actions/setup-python
+        # See: https://github.com/actions/python-versions/blob/main/versions-manifest.json
         python: [3.9, 3.10, 3.11]
 
     steps:
-    - uses: actions/checkout@v3
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v3 # Or a later version like @v4
 
+    # Sets up Python environment using the version from the matrix
     - name: Set up Python ${{ matrix.python }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v4 # Use a specific major version
       with:
+        # Use the python-version input corresponding to the matrix value
         python-version: ${{ matrix.python }}
+        # Optional: cache dependencies for faster builds
+        # cache: 'pip'
 
+    # Installs dependencies using pip
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov mypy black isort flake8
+        # Check if requirements.txt exists before trying to install
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # Install testing and linting tools separately
+        pip install pytest pytest-qt pytest-cov mypy black isort flake8 codecov
 
+    # Optional: Add step to check environment (useful for debugging)
+    - name: Display Python version and environment info
+      run: |
+        python --version
+        pip list
+
+    # Runs Black code formatter check
     - name: Run formatting check (Black)
       run: black --check .
 
+    # Runs isort import sort check
     - name: Run import sort check (isort)
       run: isort --check-only .
 
+    # Runs flake8 linter
     - name: Run linting (flake8)
-      run: flake8 .
+      run: flake8 . # Add any specific flake8 args if needed, e.g., --max-line-length
 
+    # Runs MyPy type checker
+    # Ensure mypy config (if any, e.g., mypy.ini) is appropriate
     - name: Run type checking (mypy)
-      run: mypy --check-untyped-defs .
+      run: mypy . # Check specific directories if needed: mypy services/ ui/ etc.
 
+    # Runs tests using pytest with coverage reporting
     - name: Run tests with coverage
       run: |
+        # Run pytest, collect coverage for specified packages, generate XML report
         pytest --cov=services --cov=models --cov=ui --cov=utils --cov=config --cov-report=xml
+
+    # Uploads coverage report to Codecov
+    # Only run on push events to main branch (or other release branches), not on PRs usually
+    # Ensure CODECOV_TOKEN is set as a secret in your GitHub repo settings if needed (often not required for public repos)
     - name: Upload coverage to Codecov
+      # Condition: run only if previous steps succeeded and it's not a pull request trigger
       if: success() && github.event_name != 'pull_request'
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v3 # Or a later version
       with:
-        files: coverage.xml
+        files: coverage.xml # Specify the coverage report file
+        # token: ${{ secrets.CODECOV_TOKEN }} # Optional: if needed for private repos
+        fail_ci_if_error: true # Optional: fail the workflow step if upload fails
