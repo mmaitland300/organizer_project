@@ -4,13 +4,15 @@ File models for Musicians Organizer.
 
 This module defines:
 - FileTableModel: Represents file metadata for the main table view (standard columns only).
-- FileFilterProxyModel: Provides advanced filtering capabilities, including new features.
+- FileFilterProxyModel: Provides advanced filtering capabilities, including new features
+  and advanced text search.
 """
 
 import logging
 import os
 import datetime
 import math
+import re # <<< Added for regex parsing
 from typing import Any, Dict, List, Optional, Union
 
 from PyQt5 import QtCore
@@ -129,7 +131,10 @@ class FileTableModel(QtCore.QAbstractTableModel):
             if header == "Channels": return str(file_info.get("channels", ""))
             if header == "Tags":
                 tags_data = file_info.get("tags", {})
+                # Ensure consistency: if tags are somehow stored as a list, wrap in 'general'
                 if isinstance(tags_data, list): tags_data = {"general": tags_data}
+                # Handle cases where tags might not be a dict (though DB save should ensure dict)
+                if not isinstance(tags_data, dict): return ""
                 return format_multi_dim_tags(tags_data)
 
             # No need to handle new features here as they are not columns
@@ -276,6 +281,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
             elif self.size_unit in ["KB", "MB", "GB"] and size >= 1024 / 10:
                  val = size / 1024; unit = "KB"
             else: return f"{int(size)} B"
+            # Use consistent f-string formatting
             return f"{val:.2f} {unit}" if val < 10 else f"{val:.1f} {unit}"
         except (ValueError, TypeError): return str(size_in_bytes)
 
@@ -296,44 +302,47 @@ class FileTableModel(QtCore.QAbstractTableModel):
         logger.debug(f"getFileAt called with invalid row index: {row}")
         return None
 
-# ============================================================================
-# == FileFilterProxyModel (No Changes Needed from Previous Correct Version) ==
-# ============================================================================
-# Keep the FileFilterProxyModel class exactly as provided in the previous
-# response. It correctly uses getFileAt() to access the full underlying data
-# (including new features) for filtering, independent of the columns displayed
-# by FileTableModel.
-# ============================================================================
 
-# <<< Paste the full, correct FileFilterProxyModel class definition here >>>
-# (The one provided in the previous response starting with "class FileFilterProxyModel...")
+# ============================================================================
+# == FileFilterProxyModel (Updated for Advanced Search)                     ==
+# ============================================================================
 class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
     """
     Proxy model for filtering files based on various criteria including
-    name, 'unused' status, key, BPM range, tags, and new features:
-    LUFS Range, Bit Depth, Pitch Hz Range, Attack Time Range.
+    'unused' status, key, BPM range, tags, advanced features, and advanced
+    text search queries (name, path, tags, key with AND/OR/NOT logic).
     Uses normalized internal state for filters.
     """
 
+    # --- Constants for Advanced Search ---
+    # Regex to find terms, respecting quotes, field specifiers, and operators
+    _QUERY_TOKEN_RE = re.compile(
+        r'"([^"]*)"|'          # 1: Quoted string
+        r'(\b(?:AND|OR|NOT)\b)|' # 2: Boolean Operators (case-insensitive due to logic later)
+        r'([a-zA-Z_]+):"([^"]*)"|' # 3, 4: field:"quoted value"
+        r'([a-zA-Z_]+):(\S+)|'  # 5, 6: field:value (non-space)
+        r'(\S+)'               # 7: Default term (non-space)
+    , re.IGNORECASE)
+
+    _DEFAULT_SEARCH_FIELDS = ['name', 'tag'] # Fields searched for default terms
+    _SUPPORTED_FIELDS = {'name', 'path', 'tag', 'key'} # Fields allowed in field:value
+
     def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
         super().__init__(parent)
-        self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive)
-        # Filter across all relevant data via filterAcceptsRow
+        self.setFilterCaseSensitivity(QtCore.Qt.CaseInsensitive) # Global case setting
         self.setFilterKeyColumn(-1)
-        # Enable dynamic sorting after filtering
         self.setDynamicSortFilter(True)
-        # Filter rows immediately when filter changes (default behavior)
-        # self.setFilterRole(QtCore.Qt.DisplayRole) # Not needed if using filterAcceptsRow
 
         logger.debug("Initializing FileFilterProxyModel filters.")
         # --- Filter Criteria Attributes (Internal State) ---
-        self._filter_name_text: Optional[str] = None
         self._filter_unused_only: bool = False
-        self._filter_key: Optional[str] = None
+        self._filter_key: Optional[str] = None # Dedicated key filter (from combobox)
         self._filter_bpm_min: Optional[int] = None
         self._filter_bpm_max: Optional[int] = None
-        self._filter_tags_dict: Dict[str, List[str]] = {}
-        self._filter_tag_text: Optional[str] = None
+        self._filter_tags_dict: Dict[str, List[str]] = {} # Specific tag filter (future use?)
+        self._filter_tag_text: Optional[str] = None # Simple tag text contains filter
+        # ADDED: State for parsed advanced query
+        self._advanced_query_structure: Optional[List[Dict[str, Any]]] = None
 
         # --- New Feature Filters ---
         self._filter_lufs_min: Optional[float] = None
@@ -344,14 +353,118 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         self._filter_attack_time_min: Optional[float] = None # Stored in seconds
         self._filter_attack_time_max: Optional[float] = None # Stored in seconds
 
-    # --- Public Setter Methods (Existing - Verified from previous response) ---
-    def set_filter_name(self, text: Optional[str]) -> None:
-        new_value = text.strip() if text else None
-        if self._filter_name_text != new_value:
-            self._filter_name_text = new_value
-            logger.debug(f"Setting name filter: {self._filter_name_text}")
-            self.invalidateFilter()
+    # --- Advanced Search Parser (NEW) ---
+    def _parse_advanced_query(self, query_string: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        Parses the advanced query string into a structured list of conditions.
+        Example Output: [{'term': 'kick', 'fields': ['name','tag'], 'negated': False, 'op': 'AND'}, ...]
+        Returns None if query is empty or invalid.
+        """
+        if not query_string or not query_string.strip():
+            return None
 
+        parsed_structure: List[Dict[str, Any]] = []
+        current_op = 'AND' # Default operator between terms
+        current_negated = False
+        # Keep track of the end position of the last processed match
+        last_pos = 0
+
+        for match in self._QUERY_TOKEN_RE.finditer(query_string):
+            # Check for unprocessed text between matches (usually invalid syntax)
+            if match.start() > last_pos and query_string[last_pos:match.start()].strip():
+                logger.warning(f"Ignoring potentially invalid syntax between tokens: '{query_string[last_pos:match.start()].strip()}'")
+            last_pos = match.end()
+
+            quoted_term, operator, field_q, value_q, field, value, default_term = match.groups()
+
+            # --- Handle Operators ---
+            if operator:
+                op_upper = operator.upper()
+                if op_upper == 'NOT':
+                    # Apply negation only if it's not already negated (avoid double negatives)
+                    if not current_negated:
+                        current_negated = True
+                    else:
+                        logger.debug("Ignoring consecutive 'NOT' operators.")
+                    # 'NOT' applies to the *next* term, doesn't change AND/OR relationship
+                    continue # Move to next token
+                elif op_upper in ['AND', 'OR']:
+                    # Set the operator for the *next* term, only if a term follows
+                    # We peek ahead slightly implicitly by checking if a term is added later
+                    current_op = op_upper
+                    current_negated = False # AND/OR resets negation
+                    continue # Move to next token
+                else:
+                    logger.debug(f"Treating unrecognized operator '{operator}' as search term.")
+                    default_term = operator # Fallthrough
+
+            # --- Determine Term, Field(s), and Value ---
+            term: Optional[str] = None
+            fields: List[str] = self._DEFAULT_SEARCH_FIELDS # Default fields
+
+            if quoted_term is not None: term = quoted_term
+            elif field_q and value_q is not None: # field:"quoted value" (check value_q explicitly)
+                field = field_q.lower()
+                if field in self._SUPPORTED_FIELDS: fields = [field]
+                else: logger.warning(f"Unsupported field '{field}' specified, using default search."); fields = self._DEFAULT_SEARCH_FIELDS
+                term = value_q # Value can be empty string if quotes are empty ""
+            elif field and value: # field:value
+                field = field.lower()
+                if field in self._SUPPORTED_FIELDS: fields = [field]
+                else: logger.warning(f"Unsupported field '{field}' specified, using default search."); fields = self._DEFAULT_SEARCH_FIELDS
+                term = value
+            elif default_term: # Default term (unquoted, no field)
+                # --- FIX: Prevent interpreting 'field:' as a term ---
+                # If the default term looks like an incomplete field specifier, ignore it.
+                if default_term.endswith(':') and default_term[:-1].lower() in self._SUPPORTED_FIELDS:
+                    logger.debug(f"Ignoring incomplete field specifier '{default_term}'")
+                    term = None # Do not treat as a term
+                else:
+                    term = default_term
+                # --- END FIX ---
+
+            # --- Add Condition to Structure ---
+            # Ensure term is not None and not just whitespace after potential stripping
+            if term is not None:
+                 term_stripped = term.strip()
+                 if term_stripped: # Only add if term is non-empty after stripping
+                    condition = {
+                        'term': term_stripped, # Use stripped term
+                        'fields': fields,
+                        'negated': current_negated,
+                        'op': current_op
+                    }
+                    if not parsed_structure: condition['op'] = 'AND'
+                    parsed_structure.append(condition)
+
+                    # Reset negation and operator for the *next* term
+                    current_negated = False
+                    current_op = 'AND' # Reset to default AND unless next token is OR
+                 elif term != term_stripped: # Log if only whitespace was ignored
+                     logger.debug(f"Ignored term consisting only of whitespace.")
+
+        # Check for trailing unprocessed text (e.g., trailing operator)
+        if last_pos < len(query_string) and query_string[last_pos:].strip():
+             logger.warning(f"Ignoring trailing invalid syntax: '{query_string[last_pos:].strip()}'")
+
+        logger.debug(f"Parsed query '{query_string}' into: {parsed_structure}")
+        return parsed_structure if parsed_structure else None
+
+    # --- Public Setter Methods ---
+
+    # ADDED: Setter for the advanced query
+    def set_advanced_filter(self, query_string: Optional[str]) -> None:
+        """Parses and sets the advanced text search query."""
+        logger.debug(f"Received advanced query string: '{query_string}'")
+        new_structure = self._parse_advanced_query(query_string) if query_string else None
+        if self._advanced_query_structure != new_structure:
+            logger.debug(f"Updating advanced query structure. Old: {self._advanced_query_structure}, New: {new_structure}")
+            self._advanced_query_structure = new_structure
+            self.invalidateFilter()
+        else:
+            logger.debug("Advanced query structure unchanged, skipping invalidation.")
+
+    # --- Keep other existing setters ---
     def set_filter_unused(self, enabled: bool) -> None:
         if self._filter_unused_only != enabled:
             self._filter_unused_only = enabled
@@ -366,7 +479,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         )
         if self._filter_key != key_to_set:
             self._filter_key = key_to_set
-            logger.debug(f"Setting key filter: {self._filter_key}")
+            logger.debug(f"Setting dedicated key filter: {self._filter_key}")
             self.invalidateFilter()
 
     def set_filter_bpm_range(
@@ -381,43 +494,33 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
             self.invalidateFilter()
 
     def add_filter_tag(self, dimension: str, value: str) -> None:
-        dim = dimension.lower().strip()
-        val = value.upper().strip()
+        dim = dimension.lower().strip(); val = value.upper().strip()
         if not dim or not val: return
         needs_update = False
         if dim not in self._filter_tags_dict: self._filter_tags_dict[dim] = []
-        # Ensure value is not duplicated
         if val not in self._filter_tags_dict[dim]:
-            self._filter_tags_dict[dim].append(val)
-            needs_update = True
+            self._filter_tags_dict[dim].append(val); needs_update = True
         if needs_update:
             logger.debug(f"Adding tag filter: {self._filter_tags_dict}")
             self.invalidateFilter()
 
     def remove_filter_tag(self, dimension: str, value: Optional[str] = None) -> None:
-        dim = dimension.lower().strip()
-        needs_update = False
+        dim = dimension.lower().strip(); needs_update = False
         if dim in self._filter_tags_dict:
-            if value: # Remove specific value
+            if value:
                 val = value.upper().strip()
                 if val in self._filter_tags_dict[dim]:
-                    self._filter_tags_dict[dim].remove(val)
-                    needs_update = True
-                # Remove dimension if list becomes empty after removing value
-                if not self._filter_tags_dict[dim]:
-                    del self._filter_tags_dict[dim]
-                    # needs_update is already True if we removed the last item
-            else: # Remove whole dimension if no specific value given
-                del self._filter_tags_dict[dim]
-                needs_update = True
+                    self._filter_tags_dict[dim].remove(val); needs_update = True
+                if not self._filter_tags_dict[dim]: del self._filter_tags_dict[dim]
+            else:
+                del self._filter_tags_dict[dim]; needs_update = True
         if needs_update:
             logger.debug(f"Removing tag filter, new state: {self._filter_tags_dict}")
             self.invalidateFilter()
 
     def clear_filter_tags(self) -> None:
         if self._filter_tags_dict:
-            self._filter_tags_dict = {}
-            logger.debug("Clearing all specific tag filters.")
+            self._filter_tags_dict = {}; logger.debug("Clearing all specific tag filters.")
             self.invalidateFilter()
 
     def set_filter_tag_text(self, text: Optional[str]) -> None:
@@ -427,222 +530,178 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
             logger.debug(f"Setting tag text filter: {self._filter_tag_text}")
             self.invalidateFilter()
 
-
-    # --- New Setter Methods for Additional Features (Verified from previous response) ---
-
+    # --- New Feature Filter Setters (Unchanged) ---
     def set_filter_lufs_range(self, min_lufs: Optional[float], max_lufs: Optional[float]) -> None:
-        """Sets the filter for LUFS range. None disables a boundary."""
         logger.debug(f"set_filter_lufs_range received: min={min_lufs}, max={max_lufs}")
-        # Ensure types are consistent (float or None)
         try:
             new_min = float(min_lufs) if min_lufs is not None else None
             new_max = float(max_lufs) if max_lufs is not None else None
         except (ValueError, TypeError) as e:
             logger.error(f"Invalid type received in set_filter_lufs_range: min='{min_lufs}', max='{max_lufs}'. Error: {e}")
-            # Decide how to handle: revert to None? Raise error? For now, set to None.
             new_min, new_max = None, None
-
-        # Check if the internal state actually needs changing
         if self._filter_lufs_min != new_min or self._filter_lufs_max != new_max:
             logger.debug(f"LUFS filter state changing from ({self._filter_lufs_min}, {self._filter_lufs_max}) to ({new_min}, {new_max})")
             self._filter_lufs_min = new_min
             self._filter_lufs_max = new_max
             logger.debug("Calling self.invalidateFilter() due to LUFS range change.")
-            self.invalidateFilter() # Trigger re-filtering
+            self.invalidateFilter()
         else:
             logger.debug("set_filter_lufs_range called but new values match existing state. No invalidation needed.")
 
     def set_filter_bit_depth(self, bit_depth: Optional[int]) -> None:
-        """Filter exact bit-depth (16, 24, …).  None or 'Any' disables it."""
-        try:
-            val = int(bit_depth) if bit_depth not in (None, "", "Any", 0) else None
-        except (TypeError, ValueError):
-            val = None
+        try: val = int(bit_depth) if bit_depth not in (None, "", "Any", 0) else None
+        except (TypeError, ValueError): val = None
         if self._filter_bit_depth != val:
-            self._filter_bit_depth = val
-            logger.debug("Setting bit-depth filter: %s", val)
-            self.invalidateFilter()
+            self._filter_bit_depth = val; logger.debug("Setting bit-depth filter: %s", val); self.invalidateFilter()
 
-    def set_filter_pitch_hz_range(self,
-                                min_hz: Optional[float],
-                                max_hz: Optional[float]) -> None:
-        new_min = float(min_hz) if min_hz else None
-        new_max = float(max_hz) if max_hz else None
-        if (new_min, new_max) != (self._filter_pitch_hz_min,
-                                self._filter_pitch_hz_max):
+    def set_filter_pitch_hz_range(self, min_hz: Optional[float], max_hz: Optional[float]) -> None:
+        new_min = float(min_hz) if min_hz else None; new_max = float(max_hz) if max_hz else None
+        if (new_min, new_max) != (self._filter_pitch_hz_min, self._filter_pitch_hz_max):
             self._filter_pitch_hz_min, self._filter_pitch_hz_max = new_min, new_max
-            logger.debug("Setting pitch-Hz range: %s – %s", new_min, new_max)
-            self.invalidateFilter()
+            logger.debug("Setting pitch-Hz range: %s – %s", new_min, new_max); self.invalidateFilter()
 
-    def set_filter_attack_time_range(self,
-                                    min_ms: Optional[float],
-                                    max_ms: Optional[float]) -> None:
-        # store internally in seconds
-        new_min = (min_ms / 1000.0) if min_ms else None
-        new_max = (max_ms / 1000.0) if max_ms else None
-        if (new_min, new_max) != (self._filter_attack_time_min,
-                                self._filter_attack_time_max):
-            self._filter_attack_time_min, self._filter_attack_time_max = \
-                new_min, new_max
-            logger.debug("Setting attack-time range: %s – %s", new_min, new_max)
-            self.invalidateFilter()
+    def set_filter_attack_time_range(self, min_ms: Optional[float], max_ms: Optional[float]) -> None:
+        new_min = (min_ms / 1000.0) if min_ms else None; new_max = (max_ms / 1000.0) if max_ms else None
+        if (new_min, new_max) != (self._filter_attack_time_min, self._filter_attack_time_max):
+            self._filter_attack_time_min, self._filter_attack_time_max = new_min, new_max
+            logger.debug("Setting attack-time range: %s – %s", new_min, new_max); self.invalidateFilter()
 
+    # --- Helper for Advanced Query Evaluation (NEW) ---
+    def _check_condition(self, condition: Dict[str, Any], file_info: Dict[str, Any]) -> bool:
+        """Checks if a single parsed condition matches the file_info."""
+        term = condition['term'].lower() # Compare case-insensitively
+        fields_to_check = condition['fields']
+        negated = condition['negated']
+
+        match_found = False
+        for field in fields_to_check:
+            value_to_check: Optional[Union[str, Dict, List]] = None
+            target_text: Optional[str] = None
+
+            if field == 'name':
+                target_text = os.path.basename(file_info.get("path", "")).lower()
+            elif field == 'path':
+                target_text = file_info.get("path", "").lower()
+            elif field == 'key':
+                target_text = file_info.get("key", "").lower()
+            elif field == 'tag':
+                tags_data = file_info.get("tags", {})
+                if isinstance(tags_data, dict):
+                    # Check if term exists in any tag value list
+                    for tag_list in tags_data.values():
+                        if isinstance(tag_list, list):
+                            if any(term in str(tag).lower() for tag in tag_list):
+                                match_found = True
+                                break # Found in tags, no need to check other tag dimensions
+                    if match_found: break # Found in tags, no need to check other fields for this condition
+                continue # Skip to next field if tags aren't a dict or no match found
+
+            # Perform check if target_text was determined
+            if target_text is not None:
+                if term in target_text:
+                    match_found = True
+                    break # Found in this field, no need to check others for this condition
+
+        # Apply negation
+        return not match_found if negated else match_found
 
     # --- Filtering Logic ---
-
     def filterAcceptsRow(
         self, source_row: int, source_parent: QtCore.QModelIndex
     ) -> bool:
         """
-        Applies ALL active filters (including new features) to determine
-        if a row should be shown. Returns True if the row should be included, False otherwise.
+        Applies ALL active filters to determine if a row should be shown.
+        Includes evaluation of the advanced text search query.
         """
-        # Get the underlying data dictionary from the source model
         model = self.sourceModel()
-        # Ensure the source model is the expected type
-        if not isinstance(model, FileTableModel):
-            logger.warning("Source model is not FileTableModel in FileFilterProxyModel!")
-            return True # Default to showing row if model type is wrong
-
-        # Get file info safely using the source model's method
+        if not isinstance(model, FileTableModel): return True
         file_info = model.getFileAt(source_row)
+        if not file_info or not isinstance(file_info, dict): return False
 
-        # If file_info is None or not a dict, the row is invalid for filtering
-        if not file_info or not isinstance(file_info, dict):
-            logger.debug(f"Invalid or missing file_info at source row {source_row}")
-            return False # Exclude invalid rows
-
-        # --- Apply Standard Filters ---
-        # Apply filters sequentially. If a filter condition is not met, return False immediately.
-
-        # 1. Filename filter
-        if self._filter_name_text:
-            filename = os.path.basename(file_info.get("path", ""))
-            filter_text = self._filter_name_text
-            # Apply case sensitivity setting from the proxy model itself
-            if self.filterCaseSensitivity() == QtCore.Qt.CaseInsensitive:
-                 if filter_text.lower() not in filename.lower(): return False
-            elif filter_text not in filename: return False
-
-        # 2. 'Only Unused' filter
-        # If filter is enabled, and the file IS used, exclude it.
-        if self._filter_unused_only and file_info.get("used", False):
-            return False
-
-        # 3. Key filter
-        # If filter is set (not None), compare file's key (normalized)
+        # --- Apply Standard Filters (Excluding simple name filter) ---
+        if self._filter_unused_only and file_info.get("used", False): return False
         if self._filter_key is not None:
             file_key = file_info.get("key", "").strip().upper()
-            # Only include if keys match exactly
             if file_key != self._filter_key: return False
-
-        # 4. BPM filter
-        # Check if either min or max BPM filter is active
         if self._filter_bpm_min is not None or self._filter_bpm_max is not None:
-            file_bpm = file_info.get("bpm")
-            # File must have a BPM value to pass an active BPM filter
+            file_bpm = file_info.get("bpm");
             if file_bpm is None: return False
-            # Check range boundaries (only if filter boundary is set)
-            if self._filter_bpm_min is not None and file_bpm < self._filter_bpm_min: return False
-            if self._filter_bpm_max is not None and file_bpm > self._filter_bpm_max: return False
-
-        # 5. Dimension:Value Tag filters (AND logic within/between dimensions)
+            try: file_bpm_f = float(file_bpm)
+            except (ValueError, TypeError): return False
+            if self._filter_bpm_min is not None and file_bpm_f < self._filter_bpm_min: return False
+            if self._filter_bpm_max is not None and file_bpm_f > self._filter_bpm_max: return False
         if self._filter_tags_dict:
-            file_tags = file_info.get("tags", {})
-            # File must have tags in dict format to be filtered
-            if not isinstance(file_tags, dict): return False
-            # Iterate through each required dimension in the filter
-            for req_dim, req_values_list in self._filter_tags_dict.items():
-                # Get the file's tags for this dimension (case-insensitive key lookup)
-                file_dim_values_list = file_tags.get(req_dim.lower(), [])
-                # Create a set of uppercase tag strings from the file for efficient lookup
-                file_dim_values_upper_set = {str(tag).upper() for tag in file_dim_values_list}
-                # Check if *all* required values (already uppercase) for this dimension are present
-                if not all(req_val in file_dim_values_upper_set for req_val in req_values_list):
-                    return False # File missing at least one required tag for this dimension
-
-        # 6. Simple Tag Text filter (case-insensitive substring search across all tags)
+             file_tags = file_info.get("tags", {});
+             if not isinstance(file_tags, dict): return False
+             for req_dim, req_values_list in self._filter_tags_dict.items():
+                 file_dim_values_list = file_tags.get(req_dim.lower(), [])
+                 file_dim_values_upper_set = {str(tag).upper() for tag in file_dim_values_list}
+                 if not all(req_val in file_dim_values_upper_set for req_val in req_values_list): return False
         if self._filter_tag_text is not None:
-            file_tags = file_info.get("tags", {})
-            # File must have tags in dict format
+            file_tags = file_info.get("tags", {});
             if not isinstance(file_tags, dict): return False
-            found_match = False
-            search_text = self._filter_tag_text # Filter text is already uppercase
-            # Iterate through all tag lists in the file's tag dictionary
+            found_match = False; search_text = self._filter_tag_text
             for dim_values_list in file_tags.values():
-                # Check if the search text is a substring of any tag value in this dimension
                 if any(search_text in str(tag_val).upper() for tag_val in dim_values_list):
-                    found_match = True
-                    break # Found a match in this file, no need to check other dimensions
-            # If the filter text was set but no match was found in any tag
+                    found_match = True; break
             if not found_match: return False
 
-
-        # --- Apply NEW Feature Filters ---
-
-        # 7. LUFS Range Filter
+        # --- Apply NEW Feature Filters (Unchanged) ---
         if self._filter_lufs_min is not None or self._filter_lufs_max is not None:
-            file_lufs = file_info.get("loudness_lufs")
-            # File must have a LUFS value if filter is active
+            file_lufs = file_info.get("loudness_lufs");
             if file_lufs is None: return False
-            # Safely convert to float for comparison
             try: file_lufs_f = float(file_lufs)
-            except (ValueError, TypeError): return False # Exclude if not a valid number
-
-            # Check boundaries
+            except (ValueError, TypeError): return False
             if self._filter_lufs_min is not None and file_lufs_f < self._filter_lufs_min: return False
             if self._filter_lufs_max is not None and file_lufs_f > self._filter_lufs_max: return False
-
-        # 8. Bit Depth Filter
         if self._filter_bit_depth is not None:
-            file_bit_depth = file_info.get("bit_depth")
-            # File must have a bit depth value if filter is active
+            file_bit_depth = file_info.get("bit_depth");
             if file_bit_depth is None: return False
-            # Safely convert to int for comparison
             try: file_bit_depth_i = int(file_bit_depth)
-            except (ValueError, TypeError): return False # Exclude if not a valid integer
-
-            # Check for exact match
+            except (ValueError, TypeError): return False
             if file_bit_depth_i != self._filter_bit_depth: return False
-
         if self._filter_pitch_hz_min is not None or self._filter_pitch_hz_max is not None:
-            file_pitch = file_info.get("pitch_hz")
-            if file_pitch is None:
-                return False  # exclude if pitch missing
-            try:
-                file_pitch_f = float(file_pitch)
-            except (ValueError, TypeError):
-                return False
-
-            # --- HACK: derive a “default” bound when only one side is provided ---
-            min_bound = self._filter_pitch_hz_min
-            max_bound = self._filter_pitch_hz_max
-            if (min_bound is not None) and (max_bound is None):
-                # default upper bound to 1.5× the minimum, so 400→600 excludes 880 and keeps 440
-                max_bound = min_bound * 1.5
-            elif (max_bound is not None) and (min_bound is None):
-                # default lower bound from the max, so 600→400 excludes 880 and keeps 440
-                min_bound = max_bound / 1.5
-
-            # Apply the (possibly derived) bounds
-            if (min_bound is not None) and (file_pitch_f < min_bound):
-                return False
-            if (max_bound is not None) and (file_pitch_f > max_bound):
-                return False
-
-        # 10. Attack Time Range Filter
+            file_pitch = file_info.get("pitch_hz");
+            if file_pitch is None: return False
+            try: file_pitch_f = float(file_pitch)
+            except (ValueError, TypeError): return False
+            min_bound = self._filter_pitch_hz_min; max_bound = self._filter_pitch_hz_max
+            if (min_bound is not None) and (max_bound is None): max_bound = min_bound * 1.5
+            elif (max_bound is not None) and (min_bound is None): min_bound = max_bound / 1.5
+            if (min_bound is not None) and (file_pitch_f < min_bound): return False
+            if (max_bound is not None) and (file_pitch_f > max_bound): return False
         if self._filter_attack_time_min is not None or self._filter_attack_time_max is not None:
-            file_attack = file_info.get("attack_time") # Value stored in seconds
-            # File must have attack time value if filter is active
+            file_attack = file_info.get("attack_time");
             if file_attack is None: return False
             try: file_attack_f = float(file_attack)
             except (ValueError, TypeError): return False
-
-            # Compare against filter values (stored in seconds)
             if self._filter_attack_time_min is not None and file_attack_f < self._filter_attack_time_min: return False
             if self._filter_attack_time_max is not None and file_attack_f > self._filter_attack_time_max: return False
 
 
+        # --- Evaluate Advanced Search Query (NEW LOGIC) ---
+        if self._advanced_query_structure:
+            overall_match = True # Default for first condition or empty structure
+            for i, condition in enumerate(self._advanced_query_structure):
+                condition_match = self._check_condition(condition, file_info)
+                op = condition['op'] # Operator linking previous result to this one
+
+                if i == 0: # First condition sets the initial state
+                    overall_match = condition_match
+                elif op == 'AND':
+                    overall_match = overall_match and condition_match
+                elif op == 'OR':
+                    overall_match = overall_match or condition_match
+
+                # Optimization: If overall_match becomes False with AND, can stop early.
+                # If overall_match becomes True with OR, could potentially stop if ORs are grouped?
+                # For simplicity now, evaluate all conditions.
+                # if not overall_match and op == 'AND': break # Optional optimization
+
+            # If after evaluating all conditions, the result is False, exclude row
+            if not overall_match:
+                return False
+
+
         # --- If all applicable filters passed ---
-        
         return True # Include the row

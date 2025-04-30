@@ -279,7 +279,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Filename Filter
         lblFilter = QtWidgets.QLabel("Name Contains:", filter_group_box)
         self.txtFilter = QtWidgets.QLineEdit(filter_group_box)
-        self.txtFilter.setPlaceholderText("Type to filter filenames...")
+        self.txtFilter.setPlaceholderText("E.g., kick AND tag:loop NOT name:perc...") # Updated hint
         filter_layout.addWidget(lblFilter)
         filter_layout.addWidget(self.txtFilter)
 
@@ -476,7 +476,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.attack_max_spinbox.valueChanged.connect(self._update_attack_time_filter)
 
         # --- Connect Debounce Timers ---
+        # --- MODIFICATION: Ensure nameFilterTimer timeout connects to the correct slot ---
+        # This slot now calls set_advanced_filter instead of set_filter_name
         self.nameFilterTimer.timeout.connect(self.on_name_filter_apply)
+
         self.tagFilterTimer.timeout.connect(self.on_tag_text_filter_apply)
 
         # Initial UI state update
@@ -983,7 +986,9 @@ class MainWindow(QtWidgets.QMainWindow):
         """Applies the name filter text to the proxy model."""
         filter_text = self.txtFilter.text()
         logger.debug(f"Applying name filter: '{filter_text}'")
-        self.proxyModel.set_filter_name(filter_text)
+
+        self.proxyModel.set_advanced_filter(filter_text) # Changed from set_filter_name
+
 
     @pyqtSlot()
     def on_tag_text_filter_apply(self) -> None:
