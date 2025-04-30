@@ -27,14 +27,14 @@ class WaveformPlotter:
             times = np.linspace(0, len(y) / sr, num=len(y_ds))
 
             # Prepare filename for title
-            base_filename = os.path.basename(file_path) # <<< Get filename
+            base_filename = os.path.basename(file_path)  # <<< Get filename
 
             ax.clear()
             ax.plot(times, y_ds)
             ax.set_xlabel("Time (s)")
             ax.set_ylabel("Amplitude")
             # --- Modified Line ---
-            ax.set_title(base_filename) # <<< Use filename for title
+            ax.set_title(base_filename)  # <<< Use filename for title
             # --- End Modification ---
 
         except Exception as e:
@@ -42,7 +42,14 @@ class WaveformPlotter:
             logger.error(f"WaveformPlotter failed for {file_path}: {e}", exc_info=True)
             # Optionally re-raise, or clear the axes and display an error message
             ax.clear()
-            ax.text(0.5, 0.5, f'Error plotting:\n{os.path.basename(file_path)}',
-                    horizontalalignment='center', verticalalignment='center',
-                    transform=ax.transAxes, wrap=True, color='red')
+            ax.text(
+                0.5,
+                0.5,
+                f"Error plotting:\n{os.path.basename(file_path)}",
+                horizontalalignment="center",
+                verticalalignment="center",
+                transform=ax.transAxes,
+                wrap=True,
+                color="red",
+            )
             # raise # Re-raising might crash the dialog, handle gracefully in UI if needed

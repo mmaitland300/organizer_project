@@ -10,7 +10,16 @@ import time
 from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import QDialog, QListWidget, QVBoxLayout, QDialogButtonBox, QAbstractItemView, QTableWidget, QTableWidgetItem, QHeaderView
+from PyQt5.QtWidgets import (
+    QDialog,
+    QListWidget,
+    QVBoxLayout,
+    QDialogButtonBox,
+    QAbstractItemView,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+)
 from PyQt5.QtCore import QUrl, pyqtSlot
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
 from PyQt5.QtWidgets import QMessageBox
@@ -32,7 +41,7 @@ from ui.controllers import (
 )
 
 # Import dialogs used
-from ui.dialogs.feature_view_dialog import FeatureViewDialog # Import the new dialog
+from ui.dialogs.feature_view_dialog import FeatureViewDialog  # Import the new dialog
 from ui.dialogs.duplicate_manager_dialog import DuplicateManagerDialog
 from ui.dialogs.multi_dim_tag_editor_dialog import MultiDimTagEditorDialog
 from ui.dialogs.waveform_dialog import WaveformDialog
@@ -43,12 +52,14 @@ from utils.helpers import bytes_to_unit, open_file_location
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+
 # --- New Similarity Results Dialog ---
 class SimilarityResultsDialog(QDialog):
     """
     A simple dialog to display similarity search results.
     Shows file path and distance in a table.
     """
+
     def __init__(self, results: List[Dict[str, Any]], reference_path: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Files Similar to: {os.path.basename(reference_path)}")
@@ -61,7 +72,7 @@ class SimilarityResultsDialog(QDialog):
         self.tableWidget.setColumnCount(2)
         self.tableWidget.setHorizontalHeaderLabels(["Distance", "File Path"])
         self.tableWidget.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers) # Read-only
+        self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)  # Read-only
         # Allow sorting by distance
         self.tableWidget.setSortingEnabled(True)
 
@@ -70,13 +81,13 @@ class SimilarityResultsDialog(QDialog):
             # Distance Item (Numerical, for sorting)
             distance_item = QTableWidgetItem()
             # Store distance as float data, display formatted string
-            distance_val = result.get('distance', float('inf'))
+            distance_val = result.get("distance", float("inf"))
             distance_item.setData(QtCore.Qt.DisplayRole, f"{distance_val:.4f}")
             # Ensure it sorts numerically if needed (though string sort might be okay for floats)
             # distance_item.setData(QtCore.Qt.UserRole, distance_val) # Alternative for custom sorting
 
             # Path Item
-            path_item = QTableWidgetItem(result.get('path', 'N/A'))
+            path_item = QTableWidgetItem(result.get("path", "N/A"))
 
             self.tableWidget.setItem(row, 0, distance_item)
             self.tableWidget.setItem(row, 1, path_item)
@@ -95,13 +106,15 @@ class SimilarityResultsDialog(QDialog):
 
         self.setLayout(layout)
 
+
 # --- New Worker Thread for Statistics ---
 class StatsWorker(QtCore.QThread):
     """Worker thread to calculate feature statistics in the background."""
-    finished = QtCore.pyqtSignal(bool, str) # Signal: success(bool), message(str)
+
+    finished = QtCore.pyqtSignal(bool, str)  # Signal: success(bool), message(str)
     # No progress signal needed for now, could be added if stats calc is chunked
 
-    def __init__(self, db_manager: DatabaseManager, parent=None): # Accept db_manager
+    def __init__(self, db_manager: DatabaseManager, parent=None):  # Accept db_manager
         super().__init__(parent)
         self.db_manager = db_manager
 
@@ -110,12 +123,14 @@ class StatsWorker(QtCore.QThread):
         logger.info("StatsWorker thread run() method entered.")
         message = "Statistics updated successfully."
         success = False
-        stats = None # Initialize stats variable
+        stats = None  # Initialize stats variable
 
         try:
             # --- ADD specific try...except around the DB call ---
             try:
-                logger.info("StatsWorker: Calling get_feature_statistics(refresh=True)...")
+                logger.info(
+                    "StatsWorker: Calling get_feature_statistics(refresh=True)..."
+                )
                 # This is the potentially hanging/erroring call:
                 logger.debug("StatsWorker: >>> Entering DB stats calculation call.")
                 stats = self.db_manager.get_feature_statistics(refresh=True)
@@ -123,22 +138,27 @@ class StatsWorker(QtCore.QThread):
                 logger.info("StatsWorker: get_feature_statistics call completed.")
             except Exception as db_error:
                 # Log the specific error from the DB call
-                logger.error(f"StatsWorker: CRITICAL ERROR during get_feature_statistics call: {db_error}", exc_info=True)
+                logger.error(
+                    f"StatsWorker: CRITICAL ERROR during get_feature_statistics call: {db_error}",
+                    exc_info=True,
+                )
                 message = f"Error calling database for statistics: {db_error}"
                 success = False
-                stats = None # Ensure stats is None so subsequent check fails gracefully
+                stats = (
+                    None  # Ensure stats is None so subsequent check fails gracefully
+                )
             # --- END specific try...except ---
 
             # Check the result *after* the call attempt
             # This part only runs if the DB call didn't raise an exception caught above
             if stats is not None:
-                 success = True # Only set success True if stats calculation *actually* succeeded
-                 logger.info("StatsWorker: Statistics calculation successful.")
+                success = True  # Only set success True if stats calculation *actually* succeeded
+                logger.info("StatsWorker: Statistics calculation successful.")
             # Only set error message if DB call didn't already set one
             elif not message.startswith("Error calling database"):
-                 message = "Statistics calculation failed or returned no data."
-                 logger.error(message)
-                 success = False # Ensure success is False
+                message = "Statistics calculation failed or returned no data."
+                logger.error(message)
+                success = False  # Ensure success is False
 
         except Exception as e:
             # Catch any other unexpected errors in the worker's overall logic
@@ -147,10 +167,14 @@ class StatsWorker(QtCore.QThread):
             success = False
         finally:
             # This finally block MUST be reached now unless the thread hangs completely
-            logger.info(f"StatsWorker thread run() finished. Emitting finished signal (success={success}).")
+            logger.info(
+                f"StatsWorker thread run() finished. Emitting finished signal (success={success})."
+            )
             # Emit the signal to trigger onStatsWorkerFinished in MainWindow
             self.finished.emit(success, message)
+
     # --- End modified run method ---
+
 
 class MainWindow(QtWidgets.QMainWindow):
     """
@@ -159,9 +183,9 @@ class MainWindow(QtWidgets.QMainWindow):
     """
 
     # --- MODIFY __init__ ---
-    def __init__(self, db_manager: DatabaseManager) -> None: # Accept db_manager
+    def __init__(self, db_manager: DatabaseManager) -> None:  # Accept db_manager
         super().__init__()
-        self.db_manager = db_manager # Store the instance
+        self.db_manager = db_manager  # Store the instance
         self.setWindowTitle("Musicians Organizer")
         self.resize(1000, 700)
         self.all_files_info: List[Dict[str, Any]] = []
@@ -171,9 +195,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.theme: str = "light"  # Initialize theme attribute
 
         # --- Controllers ---
-        self.scan_ctrl = ScanController(db_manager=self.db_manager, parent=self) # <<< Pass db_manager
+        self.scan_ctrl = ScanController(
+            db_manager=self.db_manager, parent=self
+        )  # <<< Pass db_manager
         self.dup_ctrl = DuplicatesController(self)
-        self.anal_ctrl = AnalysisController(db_manager=self.db_manager, parent=self) # <<< Pass db_manager
+        self.anal_ctrl = AnalysisController(
+            db_manager=self.db_manager, parent=self
+        )  # <<< Pass db_manager
         self.stats_worker: Optional[StatsWorker] = None
 
         # --- ADD Explicit State Flag ---
@@ -220,7 +248,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- Load Settings ---
         self.loadSettings()
 
-
     def initUI(self) -> None:
         """Creates and lays out the UI widgets, including new feature filters."""
         central_widget = QtWidgets.QWidget(self)
@@ -236,14 +263,40 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fileToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.fileToolBar)
         # ... (Add actions: actSelectFolder, actFindDuplicates, etc.) ...
-        self.actSelectFolder = QtWidgets.QAction("Select Folder", self); self.actSelectFolder.setObjectName("actSelectFolder"); self.actSelectFolder.triggered.connect(self.selectFolder); self.fileToolBar.addAction(self.actSelectFolder)
-        self.actFindDuplicates = QtWidgets.QAction("Find Duplicates", self); self.actFindDuplicates.setObjectName("actFindDuplicates"); self.actFindDuplicates.triggered.connect(self.findDuplicates); self.fileToolBar.addAction(self.actFindDuplicates)
-        actOpenFolder = QtWidgets.QAction("Open Folder", self); actOpenFolder.triggered.connect(self.openSelectedFileLocation); self.fileToolBar.addAction(actOpenFolder)
-        actDeleteSelected = QtWidgets.QAction("Delete Selected", self); actDeleteSelected.setObjectName("actDeleteSelected"); actDeleteSelected.triggered.connect(self.deleteSelected); self.fileToolBar.addAction(actDeleteSelected)
-        actSetCubase = QtWidgets.QAction("Set Cubase Folder", self); actSetCubase.triggered.connect(self.setCubaseFolder); self.fileToolBar.addAction(actSetCubase)
-        leftExpSpacer = QtWidgets.QWidget(self); leftExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); self.fileToolBar.addWidget(leftExpSpacer)
-        self.progressBar = QtWidgets.QProgressBar(self); self.progressBar.setValue(0); self.progressBar.setFixedWidth(200); progressAction = QtWidgets.QWidgetAction(self.fileToolBar); progressAction.setDefaultWidget(self.progressBar); self.fileToolBar.addAction(progressAction)
-        rightExpSpacer = QtWidgets.QWidget(self); rightExpSpacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred); self.fileToolBar.addWidget(rightExpSpacer)
+        self.actSelectFolder = QtWidgets.QAction("Select Folder", self)
+        self.actSelectFolder.setObjectName("actSelectFolder")
+        self.actSelectFolder.triggered.connect(self.selectFolder)
+        self.fileToolBar.addAction(self.actSelectFolder)
+        self.actFindDuplicates = QtWidgets.QAction("Find Duplicates", self)
+        self.actFindDuplicates.setObjectName("actFindDuplicates")
+        self.actFindDuplicates.triggered.connect(self.findDuplicates)
+        self.fileToolBar.addAction(self.actFindDuplicates)
+        actOpenFolder = QtWidgets.QAction("Open Folder", self)
+        actOpenFolder.triggered.connect(self.openSelectedFileLocation)
+        self.fileToolBar.addAction(actOpenFolder)
+        actDeleteSelected = QtWidgets.QAction("Delete Selected", self)
+        actDeleteSelected.setObjectName("actDeleteSelected")
+        actDeleteSelected.triggered.connect(self.deleteSelected)
+        self.fileToolBar.addAction(actDeleteSelected)
+        actSetCubase = QtWidgets.QAction("Set Cubase Folder", self)
+        actSetCubase.triggered.connect(self.setCubaseFolder)
+        self.fileToolBar.addAction(actSetCubase)
+        leftExpSpacer = QtWidgets.QWidget(self)
+        leftExpSpacer.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
+        )
+        self.fileToolBar.addWidget(leftExpSpacer)
+        self.progressBar = QtWidgets.QProgressBar(self)
+        self.progressBar.setValue(0)
+        self.progressBar.setFixedWidth(200)
+        progressAction = QtWidgets.QWidgetAction(self.fileToolBar)
+        progressAction.setDefaultWidget(self.progressBar)
+        self.fileToolBar.addAction(progressAction)
+        rightExpSpacer = QtWidgets.QWidget(self)
+        rightExpSpacer.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
+        )
+        self.fileToolBar.addWidget(rightExpSpacer)
 
         # Audio Tools Toolbar
         self.audioToolBar = QtWidgets.QToolBar("Audio Tools", self)
@@ -251,46 +304,114 @@ class MainWindow(QtWidgets.QMainWindow):
         self.audioToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.audioToolBar)
         # ... (Add actions: actPreview, actStopPreview, actWaveform, actWaveformPlayer, actAutoTag, actEditTags, actAnalyzeLibrary, actViewFeatures, actRecommend, actSendToCubase) ...
-        actPreview = QtWidgets.QAction("Preview", self); actPreview.triggered.connect(self.previewSelected); self.audioToolBar.addAction(actPreview)
-        self.actStopPreview = QtWidgets.QAction("Stop", self); self.actStopPreview.setObjectName("actStopPreview"); self.actStopPreview.triggered.connect(self.stopPreview); self.audioToolBar.addAction(self.actStopPreview)
-        actWaveform = QtWidgets.QAction("Waveform", self); actWaveform.triggered.connect(self.waveformPreview); self.audioToolBar.addAction(actWaveform)
+        actPreview = QtWidgets.QAction("Preview", self)
+        actPreview.triggered.connect(self.previewSelected)
+        self.audioToolBar.addAction(actPreview)
+        self.actStopPreview = QtWidgets.QAction("Stop", self)
+        self.actStopPreview.setObjectName("actStopPreview")
+        self.actStopPreview.triggered.connect(self.stopPreview)
+        self.audioToolBar.addAction(self.actStopPreview)
+        actWaveform = QtWidgets.QAction("Waveform", self)
+        actWaveform.triggered.connect(self.waveformPreview)
+        self.audioToolBar.addAction(actWaveform)
         # --- ADD Spectrogram Action ---
-        actViewSpectrogram = QtWidgets.QAction("Spectrogram", self); actViewSpectrogram.setObjectName("actViewSpectrogram"); actViewSpectrogram.triggered.connect(self.viewSpectrogram); self.audioToolBar.addAction(actViewSpectrogram)
-        actWaveformPlayer = QtWidgets.QAction("Waveform Player", self); actWaveformPlayer.triggered.connect(self.launchWaveformPlayer); self.audioToolBar.addAction(actWaveformPlayer)
-        spacer2 = QtWidgets.QWidget(self); spacer2.setFixedWidth(15); self.audioToolBar.addWidget(spacer2)
-        actAutoTag = QtWidgets.QAction("Auto Tag", self); actAutoTag.triggered.connect(self.autoTagFiles); self.audioToolBar.addAction(actAutoTag)
-        actEditTags = QtWidgets.QAction("Edit Tags", self); actEditTags.setObjectName("actEditTags"); actEditTags.triggered.connect(self.editTagsForSelectedFile); self.audioToolBar.addAction(actEditTags)
-        self.actAnalyzeLibrary = QtWidgets.QAction("Analyze Library", self); self.actAnalyzeLibrary.setObjectName("actAnalyzeLibrary"); self.actAnalyzeLibrary.triggered.connect(self.runAdvancedAnalysis); self.audioToolBar.addAction(self.actAnalyzeLibrary)
-        self.actViewFeatures = QtWidgets.QAction("View Features", self); self.actViewFeatures.setObjectName("actViewFeatures"); self.actViewFeatures.triggered.connect(self.viewSelectedFileFeatures); self.audioToolBar.addAction(self.actViewFeatures)
-        self.actRecommend = QtWidgets.QAction("Recommend", self); self.actRecommend.setObjectName("actRecommend"); self.actRecommend.triggered.connect(self.recommendSimilarSamples); self.audioToolBar.addAction(self.actRecommend)
+        actViewSpectrogram = QtWidgets.QAction("Spectrogram", self)
+        actViewSpectrogram.setObjectName("actViewSpectrogram")
+        actViewSpectrogram.triggered.connect(self.viewSpectrogram)
+        self.audioToolBar.addAction(actViewSpectrogram)
+        actWaveformPlayer = QtWidgets.QAction("Waveform Player", self)
+        actWaveformPlayer.triggered.connect(self.launchWaveformPlayer)
+        self.audioToolBar.addAction(actWaveformPlayer)
+        spacer2 = QtWidgets.QWidget(self)
+        spacer2.setFixedWidth(15)
+        self.audioToolBar.addWidget(spacer2)
+        actAutoTag = QtWidgets.QAction("Auto Tag", self)
+        actAutoTag.triggered.connect(self.autoTagFiles)
+        self.audioToolBar.addAction(actAutoTag)
+        actEditTags = QtWidgets.QAction("Edit Tags", self)
+        actEditTags.setObjectName("actEditTags")
+        actEditTags.triggered.connect(self.editTagsForSelectedFile)
+        self.audioToolBar.addAction(actEditTags)
+        self.actAnalyzeLibrary = QtWidgets.QAction("Analyze Library", self)
+        self.actAnalyzeLibrary.setObjectName("actAnalyzeLibrary")
+        self.actAnalyzeLibrary.triggered.connect(self.runAdvancedAnalysis)
+        self.audioToolBar.addAction(self.actAnalyzeLibrary)
+        self.actViewFeatures = QtWidgets.QAction("View Features", self)
+        self.actViewFeatures.setObjectName("actViewFeatures")
+        self.actViewFeatures.triggered.connect(self.viewSelectedFileFeatures)
+        self.audioToolBar.addAction(self.actViewFeatures)
+        self.actRecommend = QtWidgets.QAction("Recommend", self)
+        self.actRecommend.setObjectName("actRecommend")
+        self.actRecommend.triggered.connect(self.recommendSimilarSamples)
+        self.audioToolBar.addAction(self.actRecommend)
         # Store reference if needed for _update_ui_state
-        self.actViewSpectrogram = actViewSpectrogram # Optional: store reference
-        actSendToCubase = QtWidgets.QAction("Send to Cubase", self); actSendToCubase.triggered.connect(self.sendToCubase); self.audioToolBar.addAction(actSendToCubase)
-
+        self.actViewSpectrogram = actViewSpectrogram  # Optional: store reference
+        actSendToCubase = QtWidgets.QAction("Send to Cubase", self)
+        actSendToCubase.triggered.connect(self.sendToCubase)
+        self.audioToolBar.addAction(actSendToCubase)
 
         # --- Layout Setup ---
         splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
         left_panel = QtWidgets.QWidget(self)
         left_layout = QtWidgets.QVBoxLayout(left_panel)
         left_layout.setContentsMargins(8, 8, 8, 8)
-        left_layout.setSpacing(10) # Increase spacing slightly
+        left_layout.setSpacing(10)  # Increase spacing slightly
 
         # --- Filter Controls ---
-        filter_group_box = QtWidgets.QGroupBox("Filters") # Group filters
+        filter_group_box = QtWidgets.QGroupBox("Filters")  # Group filters
         filter_layout = QtWidgets.QVBoxLayout(filter_group_box)
         filter_layout.setSpacing(8)
 
         # Filename Filter
         lblFilter = QtWidgets.QLabel("Name Contains:", filter_group_box)
         self.txtFilter = QtWidgets.QLineEdit(filter_group_box)
-        self.txtFilter.setPlaceholderText("E.g., kick AND tag:loop NOT name:perc...") # Updated hint
+        self.txtFilter.setPlaceholderText(
+            "E.g., kick AND tag:loop NOT name:perc..."
+        )  # Updated hint
         filter_layout.addWidget(lblFilter)
         filter_layout.addWidget(self.txtFilter)
 
         # Key Filter
         lblKeyFilter = QtWidgets.QLabel("Key:", filter_group_box)
         self.comboKeyFilter = QtWidgets.QComboBox(filter_group_box)
-        keys = ["Any", "C", "Cm", "C#", "C#m", "Db", "Dbm", "D", "Dm", "D#", "D#m", "Eb", "Ebm", "E", "Em", "F", "Fm", "F#", "F#m", "Gb", "Gbm", "G", "Gm", "G#", "G#m", "Ab", "Abm", "A", "Am", "A#", "A#m", "Bb", "Bbm", "B", "Bm", "N/A"]
+        keys = [
+            "Any",
+            "C",
+            "Cm",
+            "C#",
+            "C#m",
+            "Db",
+            "Dbm",
+            "D",
+            "Dm",
+            "D#",
+            "D#m",
+            "Eb",
+            "Ebm",
+            "E",
+            "Em",
+            "F",
+            "Fm",
+            "F#",
+            "F#m",
+            "Gb",
+            "Gbm",
+            "G",
+            "Gm",
+            "G#",
+            "G#m",
+            "Ab",
+            "Abm",
+            "A",
+            "Am",
+            "A#",
+            "A#m",
+            "Bb",
+            "Bbm",
+            "B",
+            "Bm",
+            "N/A",
+        ]
         self.comboKeyFilter.addItems(keys)
         filter_layout.addWidget(lblKeyFilter)
         filter_layout.addWidget(self.comboKeyFilter)
@@ -299,12 +420,17 @@ class MainWindow(QtWidgets.QMainWindow):
         lblBpmFilter = QtWidgets.QLabel("BPM Range:", filter_group_box)
         bpm_layout = QtWidgets.QHBoxLayout()
         self.spinBpmMin = QtWidgets.QSpinBox(filter_group_box)
-        self.spinBpmMin.setRange(0, 500); self.spinBpmMin.setSuffix(" Min"); self.spinBpmMin.setSpecialValueText("Any")
+        self.spinBpmMin.setRange(0, 500)
+        self.spinBpmMin.setSuffix(" Min")
+        self.spinBpmMin.setSpecialValueText("Any")
         self.spinBpmMax = QtWidgets.QSpinBox(filter_group_box)
-        self.spinBpmMax.setRange(0, 500); self.spinBpmMax.setSuffix(" Max"); self.spinBpmMax.setSpecialValueText("Any")
+        self.spinBpmMax.setRange(0, 500)
+        self.spinBpmMax.setSuffix(" Max")
+        self.spinBpmMax.setSpecialValueText("Any")
         # Default max BPM higher than min initially
-        self.spinBpmMax.setValue(500) # Set initial max high
-        bpm_layout.addWidget(self.spinBpmMin); bpm_layout.addWidget(self.spinBpmMax)
+        self.spinBpmMax.setValue(500)  # Set initial max high
+        bpm_layout.addWidget(self.spinBpmMin)
+        bpm_layout.addWidget(self.spinBpmMax)
         filter_layout.addWidget(lblBpmFilter)
         filter_layout.addLayout(bpm_layout)
 
@@ -318,26 +444,31 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- Add NEW Feature Filters ---
         # Separator before new filters
         line_features = QtWidgets.QFrame(filter_group_box)
-        line_features.setFrameShape(QtWidgets.QFrame.HLine); line_features.setFrameShadow(QtWidgets.QFrame.Sunken)
+        line_features.setFrameShape(QtWidgets.QFrame.HLine)
+        line_features.setFrameShadow(QtWidgets.QFrame.Sunken)
         filter_layout.addWidget(line_features)
 
         # LUFS Range Filter
         lblLufsFilter = QtWidgets.QLabel("LUFS Range:", filter_group_box)
         lufs_layout = QtWidgets.QHBoxLayout()
         self.lufs_min_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
-        self.lufs_min_spinbox.setRange(-70.0, 0.0) # Realistic LUFS range
+        self.lufs_min_spinbox.setRange(-70.0, 0.0)  # Realistic LUFS range
         self.lufs_min_spinbox.setDecimals(1)
         self.lufs_min_spinbox.setSingleStep(0.5)
         self.lufs_min_spinbox.setSuffix(" Min")
-        self.lufs_min_spinbox.setSpecialValueText("Any") # Use special value text
-        self.lufs_min_spinbox.setValue(self.lufs_min_spinbox.minimum()) # Default to min
+        self.lufs_min_spinbox.setSpecialValueText("Any")  # Use special value text
+        self.lufs_min_spinbox.setValue(
+            self.lufs_min_spinbox.minimum()
+        )  # Default to min
         self.lufs_max_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
         self.lufs_max_spinbox.setRange(-70.0, 0.0)
         self.lufs_max_spinbox.setDecimals(1)
         self.lufs_max_spinbox.setSingleStep(0.5)
         self.lufs_max_spinbox.setSuffix(" Max")
-        self.lufs_max_spinbox.setSpecialValueText("Any") # Use special value text
-        self.lufs_max_spinbox.setValue(self.lufs_max_spinbox.maximum()) # Default to max
+        self.lufs_max_spinbox.setSpecialValueText("Any")  # Use special value text
+        self.lufs_max_spinbox.setValue(
+            self.lufs_max_spinbox.maximum()
+        )  # Default to max
         lufs_layout.addWidget(self.lufs_min_spinbox)
         lufs_layout.addWidget(self.lufs_max_spinbox)
         filter_layout.addWidget(lblLufsFilter)
@@ -347,7 +478,9 @@ class MainWindow(QtWidgets.QMainWindow):
         lblBitDepthFilter = QtWidgets.QLabel("Bit Depth:", filter_group_box)
         self.bit_depth_combobox = QtWidgets.QComboBox(filter_group_box)
         # Add common bit depths, ensure "Any" is first
-        self.bit_depth_combobox.addItems(["Any", "16", "24", "32", "8"]) # Order as desired
+        self.bit_depth_combobox.addItems(
+            ["Any", "16", "24", "32", "8"]
+        )  # Order as desired
         filter_layout.addWidget(lblBitDepthFilter)
         filter_layout.addWidget(self.bit_depth_combobox)
 
@@ -355,7 +488,7 @@ class MainWindow(QtWidgets.QMainWindow):
         lblPitchFilter = QtWidgets.QLabel("Pitch Range (Hz):", filter_group_box)
         pitch_layout = QtWidgets.QHBoxLayout()
         self.pitch_min_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
-        self.pitch_min_spinbox.setRange(0.0, 20000.0) # Wide range for pitch
+        self.pitch_min_spinbox.setRange(0.0, 20000.0)  # Wide range for pitch
         self.pitch_min_spinbox.setDecimals(1)
         self.pitch_min_spinbox.setSingleStep(10.0)
         self.pitch_min_spinbox.setSuffix(" Hz Min")
@@ -377,7 +510,7 @@ class MainWindow(QtWidgets.QMainWindow):
         lblAttackFilter = QtWidgets.QLabel("Attack Time Range (ms):", filter_group_box)
         attack_layout = QtWidgets.QHBoxLayout()
         self.attack_min_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
-        self.attack_min_spinbox.setRange(0.0, 10000.0) # e.g., 0 to 10 seconds in ms
+        self.attack_min_spinbox.setRange(0.0, 10000.0)  # e.g., 0 to 10 seconds in ms
         self.attack_min_spinbox.setDecimals(1)
         self.attack_min_spinbox.setSingleStep(1.0)
         self.attack_min_spinbox.setSuffix(" ms Min")
@@ -399,10 +532,12 @@ class MainWindow(QtWidgets.QMainWindow):
         left_layout.addWidget(filter_group_box)
 
         # --- Other Left Panel Controls ---
-        other_controls_group_box = QtWidgets.QGroupBox("Options") # Group options
+        other_controls_group_box = QtWidgets.QGroupBox("Options")  # Group options
         other_controls_layout = QtWidgets.QVBoxLayout(other_controls_group_box)
 
-        self.chkOnlyUnused = QtWidgets.QCheckBox("Show Only Unused Samples", other_controls_group_box)
+        self.chkOnlyUnused = QtWidgets.QCheckBox(
+            "Show Only Unused Samples", other_controls_group_box
+        )
         self.chkOnlyUnused.setChecked(False)
         other_controls_layout.addWidget(self.chkOnlyUnused)
 
@@ -414,12 +549,14 @@ class MainWindow(QtWidgets.QMainWindow):
         sizeUnitLayout.addWidget(self.comboSizeUnit)
         other_controls_layout.addLayout(sizeUnitLayout)
 
-        self.chkRecycleBin = QtWidgets.QCheckBox("Use Recycle Bin (on Delete)", other_controls_group_box)
+        self.chkRecycleBin = QtWidgets.QCheckBox(
+            "Use Recycle Bin (on Delete)", other_controls_group_box
+        )
         self.chkRecycleBin.setChecked(True)
         other_controls_layout.addWidget(self.chkRecycleBin)
 
         left_layout.addWidget(other_controls_group_box)
-        left_layout.addStretch() # Pushes controls up
+        left_layout.addStretch()  # Pushes controls up
 
         splitter.addWidget(left_panel)
 
@@ -430,7 +567,9 @@ class MainWindow(QtWidgets.QMainWindow):
         right_layout.setSpacing(5)
 
         # Create models (use the corrected FileTableModel from previous step)
-        self.model = FileTableModel([], self.db_manager, self.size_unit) # <<< Pass db_manager
+        self.model = FileTableModel(
+            [], self.db_manager, self.size_unit
+        )  # <<< Pass db_manager
         self.proxyModel = FileFilterProxyModel(self)
         self.proxyModel.setSourceModel(self.model)
 
@@ -440,33 +579,47 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tableView.setSortingEnabled(True)
         self.tableView.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.tableView.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        self.tableView.selectionModel().selectionChanged.connect(lambda: self._update_ui_state())
+        self.tableView.selectionModel().selectionChanged.connect(
+            lambda: self._update_ui_state()
+        )
         self.tableView.verticalHeader().setVisible(False)
-        self.tableView.horizontalHeader().setStretchLastSection(True) # Keep last column (Tags) stretching
+        self.tableView.horizontalHeader().setStretchLastSection(
+            True
+        )  # Keep last column (Tags) stretching
 
         right_layout.addWidget(self.tableView)
         self.labelSummary = QtWidgets.QLabel("Scanned 0 files.", self)
         right_layout.addWidget(self.labelSummary)
         splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 1) # Adjust stretch factor if needed (Left panel)
-        splitter.setStretchFactor(1, 3) # Adjust stretch factor if needed (Right panel)
+        splitter.setStretchFactor(0, 1)  # Adjust stretch factor if needed (Left panel)
+        splitter.setStretchFactor(1, 3)  # Adjust stretch factor if needed (Right panel)
         main_layout.addWidget(splitter)
 
         # --- Status Bar and Menu Bar (Keep existing setup) ---
         self.setStatusBar(QtWidgets.QStatusBar(self))
         menuBar = self.menuBar()
-        helpMenu = menuBar.addMenu("Help"); helpAction = QtWidgets.QAction("Usage Help", self); helpAction.triggered.connect(self.showHelpDialog); helpMenu.addAction(helpAction)
-        themeMenu = menuBar.addMenu("Theme"); actLight = QtWidgets.QAction("Light Mode", self); actLight.triggered.connect(lambda: self.setTheme("light", save=True)); themeMenu.addAction(actLight); actDark = QtWidgets.QAction("Dark Mode", self); actDark.triggered.connect(lambda: self.setTheme("dark", save=True)); themeMenu.addAction(actDark)
-
+        helpMenu = menuBar.addMenu("Help")
+        helpAction = QtWidgets.QAction("Usage Help", self)
+        helpAction.triggered.connect(self.showHelpDialog)
+        helpMenu.addAction(helpAction)
+        themeMenu = menuBar.addMenu("Theme")
+        actLight = QtWidgets.QAction("Light Mode", self)
+        actLight.triggered.connect(lambda: self.setTheme("light", save=True))
+        themeMenu.addAction(actLight)
+        actDark = QtWidgets.QAction("Dark Mode", self)
+        actDark.triggered.connect(lambda: self.setTheme("dark", save=True))
+        themeMenu.addAction(actDark)
 
         # --- Connect Filter UI Signals (Consolidated at end of initUI) ---
         # Standard Filters
         self.txtFilter.textChanged.connect(self._start_name_filter_timer)
         self.chkOnlyUnused.stateChanged.connect(self.on_unused_filter_changed)
         self.comboSizeUnit.currentIndexChanged.connect(self.on_size_unit_changed)
-        self.comboKeyFilter.activated[str].connect(self.proxyModel.set_filter_key) # Direct connect
-        self.spinBpmMin.valueChanged.connect(self._update_bpm_filter) # Use helper slot
-        self.spinBpmMax.valueChanged.connect(self._update_bpm_filter) # Use helper slot
+        self.comboKeyFilter.activated[str].connect(
+            self.proxyModel.set_filter_key
+        )  # Direct connect
+        self.spinBpmMin.valueChanged.connect(self._update_bpm_filter)  # Use helper slot
+        self.spinBpmMax.valueChanged.connect(self._update_bpm_filter)  # Use helper slot
         self.txtTagTextFilter.textChanged.connect(self._start_tag_text_filter_timer)
 
         # --- Connect NEW Feature Filter Signals ---
@@ -511,11 +664,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Analysis Controller
         self.anal_ctrl.started.connect(lambda: self.on_task_started("Analysis"))
-        self.anal_ctrl.progress.connect(
-            self.on_advanced_analysis_progress
-        )
+        self.anal_ctrl.progress.connect(self.on_advanced_analysis_progress)
 
-        self.anal_ctrl.analysis_data_finished.connect(self.onAdvancedAnalysisFinished) # New signal name
+        self.anal_ctrl.analysis_data_finished.connect(
+            self.onAdvancedAnalysisFinished
+        )  # New signal name
         self.anal_ctrl.error.connect(self.on_task_error)
         self.anal_ctrl.stateChanged.connect(self.on_controller_state_changed)
 
@@ -647,7 +800,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
 
         # Delete from filesystem and DB
-        db = self.db_manager #  Use stored instance
+        db = self.db_manager  #  Use stored instance
         for path in paths_to_delete_fs:
             try:
                 if self.chkRecycleBin.isChecked():
@@ -746,6 +899,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
+
     # --- ADD Slot for View Spectrogram Action ---
     @pyqtSlot()
     def viewSpectrogram(self) -> None:
@@ -754,12 +908,16 @@ class MainWindow(QtWidgets.QMainWindow):
         path = self.getSelectedFilePath()
 
         if not path:
-            QtWidgets.QMessageBox.information(self, "View Spectrogram", "No file selected.")
+            QtWidgets.QMessageBox.information(
+                self, "View Spectrogram", "No file selected."
+            )
             return
 
         # Check if the file is likely an audio file based on extension
         if not path.lower().endswith(tuple(AUDIO_EXTENSIONS)):
-            QtWidgets.QMessageBox.warning(self, "View Spectrogram", "Cannot show spectrogram for non-audio file.")
+            QtWidgets.QMessageBox.warning(
+                self, "View Spectrogram", "Cannot show spectrogram for non-audio file."
+            )
             return
 
         # Create and show the dialog
@@ -782,9 +940,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def autoTagFiles(self) -> None:
         """Applies auto-tagging (currently key from filename) to all loaded files."""
 
-        if self.is_any_task_busy(): # Assuming is_any_task_busy helper exists as defined before
-             QMessageBox.warning(self, "Auto Tag", "Cannot tag files while another task is running.")
-             return
+        if (
+            self.is_any_task_busy()
+        ):  # Assuming is_any_task_busy helper exists as defined before
+            QMessageBox.warning(
+                self, "Auto Tag", "Cannot tag files while another task is running."
+            )
+            return
 
         if not self.all_files_info:
             QtWidgets.QMessageBox.information(
@@ -794,7 +956,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         logger.info("Starting auto-tagging...")
         updated_count = 0
-        db = self.db_manager # <<< Use stored instance
+        db = self.db_manager  # <<< Use stored instance
         files_to_save: List[Dict[str, Any]] = []
         for file_info in self.all_files_info:
             # Apply auto-tagging in-place and get a flag if anything changed
@@ -832,10 +994,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 1. Validate Selection
         if not selected_proxy_indexes:
-            QMessageBox.information(self, "Recommend Similar", "Please select a reference file first.")
+            QMessageBox.information(
+                self, "Recommend Similar", "Please select a reference file first."
+            )
             return
         if len(selected_proxy_indexes) > 1:
-            QMessageBox.information(self, "Recommend Similar", "Please select only one reference file.")
+            QMessageBox.information(
+                self, "Recommend Similar", "Please select only one reference file."
+            )
             return
 
         # 2. Get Reference File Info and ID
@@ -843,53 +1009,83 @@ class MainWindow(QtWidgets.QMainWindow):
         source_index = self.proxyModel.mapToSource(proxy_index)
         if not source_index.isValid():
             logger.error("Cannot get recommendations: Invalid source index from proxy.")
-            QMessageBox.warning(self, "Recommend Similar", "Could not identify the selected file.")
+            QMessageBox.warning(
+                self, "Recommend Similar", "Could not identify the selected file."
+            )
             return
 
         file_info = self.model.getFileAt(source_index.row())
         if not file_info:
-            logger.error(f"Cannot get recommendations: No file info found for source row {source_index.row()}")
-            QMessageBox.warning(self, "Recommend Similar", "Could not retrieve data for the selected file.")
+            logger.error(
+                f"Cannot get recommendations: No file info found for source row {source_index.row()}"
+            )
+            QMessageBox.warning(
+                self,
+                "Recommend Similar",
+                "Could not retrieve data for the selected file.",
+            )
             return
 
         reference_id = file_info.get("db_id")
-        reference_path = file_info.get("path", "Unknown File") # For dialog title
+        reference_path = file_info.get("path", "Unknown File")  # For dialog title
 
         if reference_id is None:
-            logger.error(f"Cannot get recommendations: File '{reference_path}' does not have a database ID.")
-            QMessageBox.critical(self, "Recommend Similar", "Selected file is missing a database ID.")
+            logger.error(
+                f"Cannot get recommendations: File '{reference_path}' does not have a database ID."
+            )
+            QMessageBox.critical(
+                self, "Recommend Similar", "Selected file is missing a database ID."
+            )
             return
 
         # 3. Call Backend Similarity Search
-        num_results_to_fetch = 20 # Fetch slightly more, display maybe 15? Or just fetch desired N.
-        logger.info(f"Finding files similar to ID {reference_id} ('{os.path.basename(reference_path)}').")
-        self.statusBar().showMessage(f"Finding files similar to {os.path.basename(reference_path)}...")
+        num_results_to_fetch = (
+            20  # Fetch slightly more, display maybe 15? Or just fetch desired N.
+        )
+        logger.info(
+            f"Finding files similar to ID {reference_id} ('{os.path.basename(reference_path)}')."
+        )
+        self.statusBar().showMessage(
+            f"Finding files similar to {os.path.basename(reference_path)}..."
+        )
         try:
             # Ensure stats are loaded/calculated (find_similar_files handles this internally now)
             # db_manager.get_feature_statistics() # No longer needed to call explicitly here
 
-            db_manager = self.db_manager # <<< Use stored instance
+            db_manager = self.db_manager  # <<< Use stored instance
             similar_files = db_manager.find_similar_files(
-                reference_file_id=reference_id,
-                num_results=num_results_to_fetch
+                reference_file_id=reference_id, num_results=num_results_to_fetch
             )
         except Exception as e:
-            logger.error(f"An error occurred during similarity search for ID {reference_id}: {e}", exc_info=True)
-            QMessageBox.critical(self, "Recommendation Error", f"Failed to perform similarity search:\n{e}")
+            logger.error(
+                f"An error occurred during similarity search for ID {reference_id}: {e}",
+                exc_info=True,
+            )
+            QMessageBox.critical(
+                self,
+                "Recommendation Error",
+                f"Failed to perform similarity search:\n{e}",
+            )
             self.statusBar().showMessage("Recommendation error.", 5000)
-            return # Stop execution here
+            return  # Stop execution here
 
         self.statusBar().showMessage("Similarity search complete.", 5000)
 
         # 4. Display Results or No Results Message
         if not similar_files:
             logger.info(f"No similar files found for ID {reference_id}.")
-            QMessageBox.information(self, "Recommend Similar", "No similar files found based on current analysis data.")
+            QMessageBox.information(
+                self,
+                "Recommend Similar",
+                "No similar files found based on current analysis data.",
+            )
         else:
-            logger.info(f"Found {len(similar_files)} similar files for ID {reference_id}. Displaying results.")
+            logger.info(
+                f"Found {len(similar_files)} similar files for ID {reference_id}. Displaying results."
+            )
             # Create and show the results dialog
             dialog = SimilarityResultsDialog(similar_files, reference_path, parent=self)
-            dialog.exec_() # Show as modal dialog
+            dialog.exec_()  # Show as modal dialog
 
     @pyqtSlot()
     def viewSelectedFileFeatures(self) -> None:
@@ -901,10 +1097,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 1. Validate Selection
         if not selected_proxy_indexes:
-            QMessageBox.information(self, "View Features", "Please select a file first.")
+            QMessageBox.information(
+                self, "View Features", "Please select a file first."
+            )
             return
         if len(selected_proxy_indexes) > 1:
-            QMessageBox.information(self, "View Features", "Please select only one file to view its features.")
+            QMessageBox.information(
+                self,
+                "View Features",
+                "Please select only one file to view its features.",
+            )
             return
 
         # 2. Get File Info
@@ -912,45 +1114,71 @@ class MainWindow(QtWidgets.QMainWindow):
         source_index = self.proxyModel.mapToSource(proxy_index)
         if not source_index.isValid():
             logger.error("Cannot view features: Invalid source index from proxy.")
-            QMessageBox.warning(self, "View Features", "Could not identify the selected file.")
+            QMessageBox.warning(
+                self, "View Features", "Could not identify the selected file."
+            )
             return
 
         file_info = self.model.getFileAt(source_index.row())
         if not file_info:
-            logger.error(f"Cannot view features: No file info found for source row {source_index.row()}")
-            QMessageBox.warning(self, "View Features", "Could not retrieve data for the selected file.")
+            logger.error(
+                f"Cannot view features: No file info found for source row {source_index.row()}"
+            )
+            QMessageBox.warning(
+                self, "View Features", "Could not retrieve data for the selected file."
+            )
             return
 
         # +++ START DEBUG LOGGING +++
         logger.debug("--- Retrieved file_info for FeatureViewDialog ---")
         # Log a few key standard and advanced features to check their presence/values
-        log_features = ['path', 'bpm', 'brightness', 'loudness_rms', 'loudness_lufs', 'pitch_hz', 'attack_time', 'bit_depth']
-        logged_data = {key: file_info.get(key) for key in log_features if key in file_info}
+        log_features = [
+            "path",
+            "bpm",
+            "brightness",
+            "loudness_rms",
+            "loudness_lufs",
+            "pitch_hz",
+            "attack_time",
+            "bit_depth",
+        ]
+        logged_data = {
+            key: file_info.get(key) for key in log_features if key in file_info
+        }
         logger.debug(f"Data subset: {logged_data}")
         # Optionally log all keys to see what's available:
         # logger.debug(f"All keys in file_info: {list(file_info.keys())}")
         # +++ END DEBUG LOGGING +++
 
-
         # 3. Check if features likely exist (e.g., check one feature)
         # This assumes analysis has been run. A better check might be needed.
-        if file_info.get('brightness') is None and file_info.get('loudness_rms') is None:
-             reply = QMessageBox.question(self, "View Features",
-                                          "Audio features may not have been calculated for this file yet "
-                                          "(run 'Analyze Library').\n\nDo you want to view available data anyway?",
-                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-             if reply == QMessageBox.No:
-                  return
-
+        if (
+            file_info.get("brightness") is None
+            and file_info.get("loudness_rms") is None
+        ):
+            reply = QMessageBox.question(
+                self,
+                "View Features",
+                "Audio features may not have been calculated for this file yet "
+                "(run 'Analyze Library').\n\nDo you want to view available data anyway?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply == QMessageBox.No:
+                return
 
         # 4. Create and Show Dialog
         logger.info(f"Displaying features for: {file_info.get('path')}")
         try:
             dialog = FeatureViewDialog(file_info, self)
-            dialog.exec_() # Show modal dialog
+            dialog.exec_()  # Show modal dialog
         except Exception as e:
-             logger.error(f"Failed to create or show FeatureViewDialog: {e}", exc_info=True)
-             QMessageBox.critical(self, "Error", "Could not display the feature view dialog.")
+            logger.error(
+                f"Failed to create or show FeatureViewDialog: {e}", exc_info=True
+            )
+            QMessageBox.critical(
+                self, "Error", "Could not display the feature view dialog."
+            )
 
     def sendToCubase(self) -> None:
         selection = self.tableView.selectionModel().selectedRows()
@@ -1011,8 +1239,7 @@ class MainWindow(QtWidgets.QMainWindow):
         filter_text = self.txtFilter.text()
         logger.debug(f"Applying name filter: '{filter_text}'")
 
-        self.proxyModel.set_advanced_filter(filter_text) # Changed from set_filter_name
-
+        self.proxyModel.set_advanced_filter(filter_text)  # Changed from set_filter_name
 
     @pyqtSlot()
     def on_tag_text_filter_apply(self) -> None:
@@ -1067,16 +1294,25 @@ class MainWindow(QtWidgets.QMainWindow):
     @pyqtSlot(object)
     def on_controller_state_changed(self, state: ControllerState) -> None:
         """Handles state changes from Scan, Duplicates, Analysis controllers."""
-        sender_controller = self.sender() # Get the controller that emitted the signal
-        controller_name = sender_controller.__class__.__name__ if sender_controller else "Unknown Controller"
+        sender_controller = self.sender()  # Get the controller that emitted the signal
+        controller_name = (
+            sender_controller.__class__.__name__
+            if sender_controller
+            else "Unknown Controller"
+        )
         logger.debug(f"State changed for {controller_name}: New State={state}")
 
         # Check if the controller is the AnalysisController and it just became Idle
         # after having been requested to cancel.
-        if isinstance(sender_controller, AnalysisController) and state == ControllerState.Idle:
+        if (
+            isinstance(sender_controller, AnalysisController)
+            and state == ControllerState.Idle
+        ):
             if sender_controller.was_cancelled():
-                logger.info(f"{controller_name} finished after cancellation. Resetting progress bar.")
-                self.progressBar.setValue(0) # Reset progress bar to 0
+                logger.info(
+                    f"{controller_name} finished after cancellation. Resetting progress bar."
+                )
+                self.progressBar.setValue(0)  # Reset progress bar to 0
 
         self._update_ui_state()
 
@@ -1203,26 +1439,33 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             from config.settings import ALL_FEATURE_KEYS
         except ImportError:
-            logger.error("Cannot import ALL_FEATURE_KEYS from settings. Unable to ensure data consistency.")
+            logger.error(
+                "Cannot import ALL_FEATURE_KEYS from settings. Unable to ensure data consistency."
+            )
             # Handle error appropriately - maybe return or use a fallback
-            QMessageBox.critical(self, "Configuration Error", "Could not load feature key definitions.")
+            QMessageBox.critical(
+                self, "Configuration Error", "Could not load feature key definitions."
+            )
             return
-
 
         # --- CRITICAL CHECK: Use the controller's cancellation flag ---
         if self.anal_ctrl.was_cancelled():
-            logger.info("Analysis task was cancelled (flag detected). Skipping statistics update.")
+            logger.info(
+                "Analysis task was cancelled (flag detected). Skipping statistics update."
+            )
             self.statusBar().showMessage("Analysis cancelled by user.", 5000)
             # Even if cancelled, try to ensure data consistency for partial results
-            self.all_files_info = updated_files # Use the potentially partial results
+            self.all_files_info = updated_files  # Use the potentially partial results
 
             # --- Ensure Keys Exist (Apply even on cancel for consistency) ---
-            logger.debug("Ensuring all feature keys exist in results after cancelled analysis...")
+            logger.debug(
+                "Ensuring all feature keys exist in results after cancelled analysis..."
+            )
             for file_info in self.all_files_info:
-                if isinstance(file_info, dict): # Check it's a dict
+                if isinstance(file_info, dict):  # Check it's a dict
                     for key in ALL_FEATURE_KEYS:
                         if key not in file_info:
-                            file_info[key] = None # Add missing keys with None
+                            file_info[key] = None  # Add missing keys with None
             logger.debug("Key consistency check complete for cancelled results.")
             # --- End Key Check ---
 
@@ -1232,58 +1475,82 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         # --- If NOT Cancelled, Proceed ---
-        logger.info("Analysis completed successfully. Ensuring keys, updating model, triggering statistics.")
+        logger.info(
+            "Analysis completed successfully. Ensuring keys, updating model, triggering statistics."
+        )
         self.progressBar.setValue(100)
-        self.all_files_info = updated_files # Assign results
+        self.all_files_info = updated_files  # Assign results
 
         # +++ START Ensure Keys Exist +++
-        logger.debug("Ensuring all feature keys exist in successfully completed analysis results...")
+        logger.debug(
+            "Ensuring all feature keys exist in successfully completed analysis results..."
+        )
         missing_keys_added_count = 0
         for file_info in self.all_files_info:
-            if isinstance(file_info, dict): # Check it's a dict
+            if isinstance(file_info, dict):  # Check it's a dict
                 for key in ALL_FEATURE_KEYS:
                     if key not in file_info:
-                        file_info[key] = None # Add missing keys with None
+                        file_info[key] = None  # Add missing keys with None
                         missing_keys_added_count += 1
             else:
-                 logger.warning(f"Item in updated_files is not a dictionary: {file_info}")
+                logger.warning(
+                    f"Item in updated_files is not a dictionary: {file_info}"
+                )
         if missing_keys_added_count > 0:
-             logger.info(f"Added {missing_keys_added_count} missing feature keys with None value for consistency.")
+            logger.info(
+                f"Added {missing_keys_added_count} missing feature keys with None value for consistency."
+            )
         logger.debug("Key consistency check complete.")
         # +++ END Ensure Keys Exist +++
 
         # 1) Update UI with the *consistent* analysis results
-        self.model.updateData(self.all_files_info) # Update model AFTER ensuring keys
+        self.model.updateData(self.all_files_info)  # Update model AFTER ensuring keys
         self.updateSummaryLabel()
-        self.statusBar().showMessage("Analysis complete. Refreshing feature statistics...", 0)
-        logger.info("Main model updated after analysis and key check. Preparing stats worker.")
+        self.statusBar().showMessage(
+            "Analysis complete. Refreshing feature statistics...", 0
+        )
+        logger.info(
+            "Main model updated after analysis and key check. Preparing stats worker."
+        )
 
         # --- Start StatsWorker (rest of the code remains the same) ---
-        if self._is_calculating_stats and (not self.stats_worker or not self.stats_worker.isRunning()):
-            logger.warning("Stale stats flag detected before starting new worker; resetting.")
+        if self._is_calculating_stats and (
+            not self.stats_worker or not self.stats_worker.isRunning()
+        ):
+            logger.warning(
+                "Stale stats flag detected before starting new worker; resetting."
+            )
             self._is_calculating_stats = False
 
         if self._is_calculating_stats:
-            logger.warning("Statistics calculation already in progress (_is_calculating_stats=True). Skipping new trigger.")
-            self.statusBar().showMessage("Analysis complete. Statistics update already running.", 5000)
+            logger.warning(
+                "Statistics calculation already in progress (_is_calculating_stats=True). Skipping new trigger."
+            )
+            self.statusBar().showMessage(
+                "Analysis complete. Statistics update already running.", 5000
+            )
             self._update_ui_state()
             return
         if self.stats_worker and self.stats_worker.isRunning():
-            logger.warning("StatsWorker instance is unexpectedly still running. Skipping new trigger.")
-            self.statusBar().showMessage("Analysis complete. Statistics update already running.", 5000)
+            logger.warning(
+                "StatsWorker instance is unexpectedly still running. Skipping new trigger."
+            )
+            self.statusBar().showMessage(
+                "Analysis complete. Statistics update already running.", 5000
+            )
             self._update_ui_state()
             return
 
         logger.info("Creating and starting StatsWorker thread for statistics refresh.")
-        self.stats_worker = StatsWorker(db_manager=self.db_manager, parent=self) # <<< Pass db_manager
+        self.stats_worker = StatsWorker(
+            db_manager=self.db_manager, parent=self
+        )  # <<< Pass db_manager
         self.stats_worker.finished.connect(self.onStatsWorkerFinished)
         self._is_calculating_stats = True
         logger.debug("_is_calculating_stats set to True.")
         self._update_ui_state()
         self.stats_worker.start()
         logger.info("StatsWorker thread started.")
-
-
 
     def updateSummaryLabel(self) -> None:
         """Updates the summary label at the bottom."""
@@ -1429,7 +1696,7 @@ class MainWindow(QtWidgets.QMainWindow):
         settings.setValue("theme", self.theme)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        """ Handles application close event. Attempts to cancel background tasks. """
+        """Handles application close event. Attempts to cancel background tasks."""
         logger.info("Close event triggered.")
         # Check if any task is running
         is_busy = (
@@ -1456,9 +1723,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 # If user confirms exit OR if no task was busy initially:
                 logger.info("Attempting to cancel background tasks before closing...")
                 # Request cancellation for all potentially running tasks
-                if self.scan_ctrl.state != ControllerState.Idle: self.scan_ctrl.cancel()
-                if self.dup_ctrl.state != ControllerState.Idle: self.dup_ctrl.cancel()
-                if self.anal_ctrl.state != ControllerState.Idle: self.anal_ctrl.cancel()
+                if self.scan_ctrl.state != ControllerState.Idle:
+                    self.scan_ctrl.cancel()
+                if self.dup_ctrl.state != ControllerState.Idle:
+                    self.dup_ctrl.cancel()
+                if self.anal_ctrl.state != ControllerState.Idle:
+                    self.anal_ctrl.cancel()
                 # *** REMOVED explicit wait() loop ***
                 # Rely on controller/worker cleanup via signals and context managers
                 logger.info("Cancellation requested for running tasks.")
@@ -1471,15 +1741,19 @@ class MainWindow(QtWidgets.QMainWindow):
     # --- UI State Update Logic ---
     def _update_ui_state(self) -> None:
         """Helper method to update UI element enabled/disabled states."""
-        logger.debug("--- _update_ui_state ENTERED ---") # Log entry clearly
+        logger.debug("--- _update_ui_state ENTERED ---")  # Log entry clearly
         # Log controller states explicitly *before* calculating busy state
         scan_state = self.scan_ctrl.state
         dup_state = self.dup_ctrl.state
         anal_state = self.anal_ctrl.state
-        logger.debug(f"Current Controller States: Scan={scan_state}, Dup={dup_state}, Anal={anal_state}")
-        logger.debug(f"Current Stats Flag: _is_calculating_stats={self._is_calculating_stats}") # Log flag state
+        logger.debug(
+            f"Current Controller States: Scan={scan_state}, Dup={dup_state}, Anal={anal_state}"
+        )
+        logger.debug(
+            f"Current Stats Flag: _is_calculating_stats={self._is_calculating_stats}"
+        )  # Log flag state
         is_scan_busy = self.scan_ctrl.state != ControllerState.Idle
-        is_dup_busy  = self.dup_ctrl.state  != ControllerState.Idle
+        is_dup_busy = self.dup_ctrl.state != ControllerState.Idle
         is_anal_busy = self.anal_ctrl.state != ControllerState.Idle
         # STATS‐LEVEL BUSY: only blocks recommendation
         is_stats_busy = self._is_calculating_stats
@@ -1487,10 +1761,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # CONTROLLER‐LEVEL BUSY: blocks most UI
         is_controller_busy = is_scan_busy or is_dup_busy or is_anal_busy
 
-
         # Determine overall busy state
         is_controller_busy = is_scan_busy or is_dup_busy or is_anal_busy
-        is_stats_busy      = self._is_calculating_stats
+        is_stats_busy = self._is_calculating_stats
 
         # Log file info count (useful for checking 'can_operate_on_data')
         file_count = len(self.all_files_info) if self.all_files_info else 0
@@ -1503,8 +1776,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # --- Define conditions for enabling actions ---
         # only controller busy blocks these:
-        can_operate_on_data          = (not is_controller_busy) and bool(self.all_files_info)
-        can_operate_on_selection     = (not is_controller_busy) and is_selection
+        can_operate_on_data = (not is_controller_busy) and bool(self.all_files_info)
+        can_operate_on_selection = (not is_controller_busy) and is_selection
         can_operate_on_single_select = (not is_controller_busy) and is_single_selection
 
         # --- Get Action References ---
@@ -1513,32 +1786,53 @@ class MainWindow(QtWidgets.QMainWindow):
         find_duplicates_action = getattr(self, "actFindDuplicates", None)
         analyze_library_action = getattr(self, "actAnalyzeLibrary", None)
         stop_action = getattr(self, "actStopPreview", None)
-        recommend_action = getattr(self, "actRecommend", self.findChild(QtWidgets.QAction, "Recommend"))
+        recommend_action = getattr(
+            self, "actRecommend", self.findChild(QtWidgets.QAction, "Recommend")
+        )
         view_features_action = getattr(self, "actViewFeatures", None)
-        delete_action = self.findChild(QtWidgets.QAction, "actDeleteSelected") # Adjust name if needed
-        edit_tags_action = self.findChild(QtWidgets.QAction, "actEditTags") # Adjust name if needed
-        preview_action = self.findChild(QtWidgets.QAction, "actPreview") # Adjust name if needed
-        send_cubase_action = self.findChild(QtWidgets.QAction, "actSendToCubase") # Adjust name if needed
+        delete_action = self.findChild(
+            QtWidgets.QAction, "actDeleteSelected"
+        )  # Adjust name if needed
+        edit_tags_action = self.findChild(
+            QtWidgets.QAction, "actEditTags"
+        )  # Adjust name if needed
+        preview_action = self.findChild(
+            QtWidgets.QAction, "actPreview"
+        )  # Adjust name if needed
+        send_cubase_action = self.findChild(
+            QtWidgets.QAction, "actSendToCubase"
+        )  # Adjust name if needed
 
-        view_spectrogram_action = getattr(self, "actViewSpectrogram", None) # Get new action
+        view_spectrogram_action = getattr(
+            self, "actViewSpectrogram", None
+        )  # Get new action
 
         # --- Set Enabled States ---
         select_folder_action.setEnabled(not is_controller_busy)
-        find_duplicates_action.setEnabled(not is_controller_busy and bool(self.all_files_info))
-        analyze_library_action.setEnabled(not is_controller_busy and bool(self.all_files_info))
+        find_duplicates_action.setEnabled(
+            not is_controller_busy and bool(self.all_files_info)
+        )
+        analyze_library_action.setEnabled(
+            not is_controller_busy and bool(self.all_files_info)
+        )
 
-        if delete_action: delete_action.setEnabled(can_operate_on_selection)
-        if preview_action: preview_action.setEnabled(can_operate_on_selection)
-        if send_cubase_action: send_cubase_action.setEnabled(can_operate_on_selection and bool(self.cubase_folder))
-        if edit_tags_action: edit_tags_action.setEnabled(can_operate_on_selection)
-        recommend_action.setEnabled(
-            (not is_controller_busy)
-            and (not is_stats_busy)
-            and is_single_selection
+        if delete_action:
+            delete_action.setEnabled(can_operate_on_selection)
+        if preview_action:
+            preview_action.setEnabled(can_operate_on_selection)
+        if send_cubase_action:
+            send_cubase_action.setEnabled(
+                can_operate_on_selection and bool(self.cubase_folder)
             )
-        
+        if edit_tags_action:
+            edit_tags_action.setEnabled(can_operate_on_selection)
+        recommend_action.setEnabled(
+            (not is_controller_busy) and (not is_stats_busy) and is_single_selection
+        )
+
         # Enable spectrogram view for single audio file selection when not busy
-        if view_spectrogram_action: view_spectrogram_action.setEnabled(can_operate_on_single_select)
+        if view_spectrogram_action:
+            view_spectrogram_action.setEnabled(can_operate_on_single_select)
 
         # Handle View Features tooltip update (incorporate previous fix)
         if view_features_action:
@@ -1546,20 +1840,27 @@ class MainWindow(QtWidgets.QMainWindow):
             tooltip = "View detailed audio features for the selected file."
             if is_single_selection:
                 # Check if features exist for tooltip modification
-                try: # Add try-except for safety during state update
-                    selected_proxy_indexes = self.tableView.selectionModel().selectedRows()
-                    if selected_proxy_indexes: # Check if selection still valid
+                try:  # Add try-except for safety during state update
+                    selected_proxy_indexes = (
+                        self.tableView.selectionModel().selectedRows()
+                    )
+                    if selected_proxy_indexes:  # Check if selection still valid
                         proxy_index = selected_proxy_indexes[0]
                         source_index = self.proxyModel.mapToSource(proxy_index)
                         if source_index.isValid():
                             file_info = self.model.getFileAt(source_index.row())
-                            if file_info and file_info.get('brightness') is None and \
-                               file_info.get('loudness_rms') is None and file_info.get('mfcc1_mean') is None:
-                                tooltip += "\n(Run 'Analyze Library' to calculate features)"
+                            if (
+                                file_info
+                                and file_info.get("brightness") is None
+                                and file_info.get("loudness_rms") is None
+                                and file_info.get("mfcc1_mean") is None
+                            ):
+                                tooltip += (
+                                    "\n(Run 'Analyze Library' to calculate features)"
+                                )
                 except Exception as e:
-                     logger.warning(f"Error checking feature existence for tooltip: {e}")
+                    logger.warning(f"Error checking feature existence for tooltip: {e}")
             view_features_action.setToolTip(tooltip)
-
 
         # Stop Button State (unchanged)
         is_task_cancellable = (
@@ -1573,23 +1874,39 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- Status Bar Update (refined logic from previous step) ---
         status = "Ready."
         timeout = 3000
-        if is_scan_busy: status, timeout = "Scanning folder...", 0
-        elif is_dup_busy: status, timeout = "Finding duplicates...", 0
-        elif is_anal_busy: status, timeout = "Analyzing library...", 0
-        elif is_stats_busy: status, timeout = "Updating feature statistics...", 0 # Uses the flag now
-        elif is_player_active: status, timeout = "Playing preview...", 0
+        if is_scan_busy:
+            status, timeout = "Scanning folder...", 0
+        elif is_dup_busy:
+            status, timeout = "Finding duplicates...", 0
+        elif is_anal_busy:
+            status, timeout = "Analyzing library...", 0
+        elif is_stats_busy:
+            status, timeout = "Updating feature statistics...", 0  # Uses the flag now
+        elif is_player_active:
+            status, timeout = "Playing preview...", 0
 
         current_message = self.statusBar().currentMessage()
         is_new_temporary = timeout > 0
-        is_current_permanent = not any([is_scan_busy, is_dup_busy, is_anal_busy, is_stats_busy, is_player_active]) and current_message == "Ready." # Rough check for permanent state
+        is_current_permanent = (
+            not any(
+                [
+                    is_scan_busy,
+                    is_dup_busy,
+                    is_anal_busy,
+                    is_stats_busy,
+                    is_player_active,
+                ]
+            )
+            and current_message == "Ready."
+        )  # Rough check for permanent state
         # Avoid replacing a permanent 'busy' message with temporary 'Ready.'
         if not (status == "Ready." and is_new_temporary and not is_current_permanent):
-              # Only update if message is different or it's a temporary message
-             if status != current_message or timeout > 0:
-                 self.statusBar().showMessage(status, timeout)
+            # Only update if message is different or it's a temporary message
+            if status != current_message or timeout > 0:
+                self.statusBar().showMessage(status, timeout)
         elif is_current_permanent and status == "Ready." and timeout > 0:
-             # If already showing permanent 'Ready.', don't flash it temporarily
-             pass
+            # If already showing permanent 'Ready.', don't flash it temporarily
+            pass
 
     # --- Helper Methods to Update NEW Feature Filters ---
 
@@ -1599,9 +1916,11 @@ class MainWindow(QtWidgets.QMainWindow):
         Reads min/max LUFS spinboxes and updates the proxy model.
         Robustly handles 'Any' state by checking against min/max values.
         """
-        if not hasattr(self, 'lufs_min_spinbox') or not hasattr(self, 'lufs_max_spinbox'):
-             logger.warning("LUFS spinboxes not available for filter update.")
-             return
+        if not hasattr(self, "lufs_min_spinbox") or not hasattr(
+            self, "lufs_max_spinbox"
+        ):
+            logger.warning("LUFS spinboxes not available for filter update.")
+            return
 
         min_val = self.lufs_min_spinbox.value()
         max_val = self.lufs_max_spinbox.value()
@@ -1615,11 +1934,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if min_lufs is not None and max_lufs is not None and min_lufs > max_lufs:
             # If min > max, we could arguably disable the filter or sync values.
             # For simplicity, we pass them; the filter logic should handle empty result.
-            logger.debug(f"Invalid LUFS range: Min ({min_lufs}) > Max ({max_lufs}). Filter likely yields no results.")
+            logger.debug(
+                f"Invalid LUFS range: Min ({min_lufs}) > Max ({max_lufs}). Filter likely yields no results."
+            )
 
         self.proxyModel.set_filter_lufs_range(min_lufs, max_lufs)
 
-    @pyqtSlot(str) # Connected to activated[str] signal
+    @pyqtSlot(str)  # Connected to activated[str] signal
     def _update_bit_depth_filter(self, selected_text: str):
         """Reads the Bit Depth combobox and updates the proxy model."""
         if selected_text == "Any":
@@ -1629,45 +1950,73 @@ class MainWindow(QtWidgets.QMainWindow):
                 bit_depth = int(selected_text)
             except (ValueError, TypeError):
                 logger.warning(f"Invalid bit depth selection: {selected_text}")
-                bit_depth = None # Default to no filter if conversion fails
+                bit_depth = None  # Default to no filter if conversion fails
 
         self.proxyModel.set_filter_bit_depth(bit_depth)
 
     @pyqtSlot()
     def _update_pitch_hz_filter(self):
         """Reads min/max Pitch Hz spinboxes and updates the proxy model."""
-        if not hasattr(self, 'pitch_min_spinbox') or not hasattr(self, 'pitch_max_spinbox'):
-             logger.warning("Pitch Hz spinboxes not available for filter update.")
-             return
+        if not hasattr(self, "pitch_min_spinbox") or not hasattr(
+            self, "pitch_max_spinbox"
+        ):
+            logger.warning("Pitch Hz spinboxes not available for filter update.")
+            return
 
         min_val = self.pitch_min_spinbox.value()
         max_val = self.pitch_max_spinbox.value()
 
-        min_hz = None if self.pitch_min_spinbox.text() == self.pitch_min_spinbox.specialValueText() else min_val
-        max_hz = None if self.pitch_max_spinbox.text() == self.pitch_max_spinbox.specialValueText() else max_val
+        min_hz = (
+            None
+            if self.pitch_min_spinbox.text()
+            == self.pitch_min_spinbox.specialValueText()
+            else min_val
+        )
+        max_hz = (
+            None
+            if self.pitch_max_spinbox.text()
+            == self.pitch_max_spinbox.specialValueText()
+            else max_val
+        )
 
         if min_hz is not None and max_hz is not None and min_hz > max_hz:
-            logger.debug(f"Invalid Pitch Hz range: Min ({min_hz}) > Max ({max_hz}). Passing as is.")
+            logger.debug(
+                f"Invalid Pitch Hz range: Min ({min_hz}) > Max ({max_hz}). Passing as is."
+            )
 
         self.proxyModel.set_filter_pitch_hz_range(min_hz, max_hz)
 
-    @pyqtSlot() # Connected to valueChanged signal
+    @pyqtSlot()  # Connected to valueChanged signal
     def _update_attack_time_filter(self):
         """Reads min/max Attack Time (ms) spinboxes and updates the proxy model."""
-        if not hasattr(self, 'attack_min_spinbox') or not hasattr(self, 'attack_max_spinbox'):
-             logger.warning("Attack Time spinboxes not available for filter update.")
-             return
+        if not hasattr(self, "attack_min_spinbox") or not hasattr(
+            self, "attack_max_spinbox"
+        ):
+            logger.warning("Attack Time spinboxes not available for filter update.")
+            return
 
         min_val_ms = self.attack_min_spinbox.value()
         max_val_ms = self.attack_max_spinbox.value()
 
         # Use special value text check for disabling filter boundary
-        min_ms = None if self.attack_min_spinbox.text() == self.attack_min_spinbox.specialValueText() else min_val_ms
-        max_ms = None if self.attack_max_spinbox.text() == self.attack_max_spinbox.specialValueText() else max_val_ms
+        min_ms = (
+            None
+            if self.attack_min_spinbox.text()
+            == self.attack_min_spinbox.specialValueText()
+            else min_val_ms
+        )
+        max_ms = (
+            None
+            if self.attack_max_spinbox.text()
+            == self.attack_max_spinbox.specialValueText()
+            else max_val_ms
+        )
 
         # Basic validation
         if min_ms is not None and max_ms is not None and min_ms > max_ms:
-            logger.debug(f"Invalid Attack Time range: Min ({min_ms}ms) > Max ({max_ms}ms). Passing as is.")
+            logger.debug(
+                f"Invalid Attack Time range: Min ({min_ms}ms) > Max ({max_ms}ms). Passing as is."
+            )
 
         # Pass values in ms to the setter (it handles conversion to seconds)
         self.proxyModel.set_filter_attack_time_range(min_ms, max_ms)
@@ -1676,14 +2025,16 @@ class MainWindow(QtWidgets.QMainWindow):
     # Make sure _update_bpm_filter also uses specialValueText if you updated the spinboxes
     def _update_bpm_filter(self):
         """Reads min/max BPM spinboxes and updates the proxy model."""
-        if hasattr(self, 'spinBpmMin') and hasattr(self, 'spinBpmMax'):
+        if hasattr(self, "spinBpmMin") and hasattr(self, "spinBpmMax"):
             min_val = self.spinBpmMin.value()
             max_val = self.spinBpmMax.value()
             min_bpm = None if min_val == self.spinBpmMin.minimum() else min_val
             max_bpm = None if max_val == self.spinBpmMax.maximum() else max_val
 
             if min_bpm is not None and max_bpm is not None and min_bpm > max_bpm:
-                logger.debug(f"Invalid BPM range: Min ({min_bpm}) > Max ({max_bpm}). Passing as is.")
+                logger.debug(
+                    f"Invalid BPM range: Min ({min_bpm}) > Max ({max_bpm}). Passing as is."
+                )
 
             self.proxyModel.set_filter_bpm_range(min_bpm, max_bpm)
 
@@ -1701,7 +2052,9 @@ class MainWindow(QtWidgets.QMainWindow):
     @pyqtSlot(bool, str)
     def onStatsWorkerFinished(self, success: bool, message: str):
         """Handles the finished signal from the StatsWorker thread."""
-        logger.info(f"StatsWorker finished signal received: Success={success}, Msg='{message}'")
+        logger.info(
+            f"StatsWorker finished signal received: Success={success}, Msg='{message}'"
+        )
         try:
             # Show appropriate status message based on success
             if success:
@@ -1709,11 +2062,19 @@ class MainWindow(QtWidgets.QMainWindow):
                 logger.info("Feature statistics successfully refreshed.")
             else:
                 # Show error message from worker, don't show generic "failed" message
-                self.statusBar().showMessage("Statistics update failed. See logs or dialog.", 5000)
-                QMessageBox.warning(self, "Statistics Update Error", f"Failed to update statistics:\n{message}")
+                self.statusBar().showMessage(
+                    "Statistics update failed. See logs or dialog.", 5000
+                )
+                QMessageBox.warning(
+                    self,
+                    "Statistics Update Error",
+                    f"Failed to update statistics:\n{message}",
+                )
                 logger.error(f"Statistics update failed: {message}")
         except Exception as e:
-            logger.error(f"Error processing StatsWorker result message: {e}", exc_info=True)
+            logger.error(
+                f"Error processing StatsWorker result message: {e}", exc_info=True
+            )
         finally:
             # --- Crucial Cleanup ---
             logger.debug("Executing finally block in onStatsWorkerFinished.")
@@ -1725,7 +2086,9 @@ class MainWindow(QtWidgets.QMainWindow):
             logger.debug("Set self.stats_worker = None.")
             # Update the UI state *after* clearing the flag
             self._update_ui_state()
-            logger.debug("Called _update_ui_state from onStatsWorkerFinished finally block.")
+            logger.debug(
+                "Called _update_ui_state from onStatsWorkerFinished finally block."
+            )
 
     def applyLightThemeStylesheet(self) -> None:
         # Stylesheet content from previous response

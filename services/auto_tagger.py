@@ -17,9 +17,10 @@ try:
         FOLDER_DIMENSION_MAP,
         FOLDER_STRUCTURE_DEPTH,
         KEY_REGEX,
-        BPM_REGEX, # <<< Import the new BPM_REGEX
+        BPM_REGEX,  # <<< Import the new BPM_REGEX
         _FOLDER_IGNORE_RE,
     )
+
     # from services.analysis_engine import AnalysisEngine # Keep commented if not used
 except ImportError:
     logging.critical("Failed to import settings for AutoTagService!", exc_info=True)
@@ -30,12 +31,13 @@ except ImportError:
     FOLDER_DIMENSION_MAP = {}
     FOLDER_STRUCTURE_DEPTH = 0
     KEY_REGEX = None
-    BPM_REGEX = None # <<< Add fallback
+    BPM_REGEX = None  # <<< Add fallback
     _FOLDER_IGNORE_RE = re.compile(r"^$")
 
 from utils.helpers import detect_key_from_filename
 
 logger = logging.getLogger(__name__)
+
 
 class AutoTagService:
     """
@@ -152,55 +154,68 @@ class AutoTagService:
         filename = os.path.basename(path)
         tags = file_info.setdefault("tags", {})
         if not isinstance(tags, dict):
-             logger.warning(f"Tags for {path} are not a dict ({type(tags)}), resetting.")
-             tags = {}
-             file_info["tags"] = tags
+            logger.warning(f"Tags for {path} are not a dict ({type(tags)}), resetting.")
+            tags = {}
+            file_info["tags"] = tags
 
         # --- 1. Filename-Based Key Extraction ---
         if KEY_REGEX:
             match = KEY_REGEX.search(filename)
             if match:
-                root = match.group('root').replace('-sharp', '#').replace('-flat', 'b')
-                quality_match = match.group('quality')
-                quality = ''
+                root = match.group("root").replace("-sharp", "#").replace("-flat", "b")
+                quality_match = match.group("quality")
+                quality = ""
                 if quality_match:
                     q_lower = quality_match.lower()
-                    if q_lower.startswith('m'):
-                        quality = 'm'
+                    if q_lower.startswith("m"):
+                        quality = "m"
                 extracted_key = root + quality
                 final_key_upper = extracted_key.upper()
                 current_key = file_info.get("key")
                 if current_key is None or current_key.upper() != final_key_upper:
-                    logger.debug(f"Extracted key '{final_key_upper}' from filename: {filename}")
+                    logger.debug(
+                        f"Extracted key '{final_key_upper}' from filename: {filename}"
+                    )
                     file_info["key"] = final_key_upper
                     modified = True
 
         # --- 2. Filename-Based BPM Extraction --- ### NEW SECTION ###
-        if BPM_REGEX and file_info.get("bpm") is None: # Only extract if BPM isn't already set
+        if (
+            BPM_REGEX and file_info.get("bpm") is None
+        ):  # Only extract if BPM isn't already set
             bpm_match = BPM_REGEX.search(filename)
             if bpm_match:
                 try:
-                    bpm_val = int(bpm_match.group('bpm'))
+                    bpm_val = int(bpm_match.group("bpm"))
                     # Basic sanity check for BPM values
                     if 50 <= bpm_val <= 300:
-                         logger.debug(f"Extracted BPM '{bpm_val}' from filename: {filename}")
-                         file_info["bpm"] = bpm_val
-                         modified = True
+                        logger.debug(
+                            f"Extracted BPM '{bpm_val}' from filename: {filename}"
+                        )
+                        file_info["bpm"] = bpm_val
+                        modified = True
                     else:
-                         logger.debug(f"Ignoring potential BPM match '{bpm_val}' (out of range 50-300) in {filename}")
+                        logger.debug(
+                            f"Ignoring potential BPM match '{bpm_val}' (out of range 50-300) in {filename}"
+                        )
                 except (ValueError, IndexError):
-                    logger.warning(f"Could not convert potential BPM match '{bpm_match.group('bpm')}' to int in {filename}")
-
+                    logger.warning(
+                        f"Could not convert potential BPM match '{bpm_match.group('bpm')}' to int in {filename}"
+                    )
 
         # --- 3. Filename-Based Tag Extraction --- (Renumbered)
         if ENABLE_FILENAME_TAGGING:
             for dimension, pattern in FILENAME_TAG_PATTERNS:
                 dim_tags = tags.setdefault(dimension, [])
                 for tag_match in pattern.finditer(filename):
-                    tag_value = tag_match.group(1) if tag_match.groups() else tag_match.group(0)
-                    tag_value_norm = tag_value.lower().replace('-', ' ')
+                    tag_value = (
+                        tag_match.group(1) if tag_match.groups() else tag_match.group(0)
+                    )
+                    tag_value_norm = tag_value.lower().replace("-", " ")
                     if tag_value_norm not in dim_tags:
-                        logger.debug(f"Adding filename tag '{tag_value_norm}' to dimension '{dimension}' for: {filename}")
+                        logger.debug(
+                            f"Adding filename tag '{tag_value_norm}' to dimension '{dimension}' for: {filename}"
+                        )
                         dim_tags.append(tag_value_norm)
                         modified = True
 
@@ -208,7 +223,7 @@ class AutoTagService:
         if ENABLE_FOLDER_TAGGING:
             try:
                 folder_path = os.path.dirname(path)
-                path_parts = folder_path.replace('\\', '/').strip('/').split('/')
+                path_parts = folder_path.replace("\\", "/").strip("/").split("/")
                 relevant_parts = path_parts[-FOLDER_STRUCTURE_DEPTH:]
                 for part in relevant_parts:
                     part_lower = part.lower()
@@ -219,11 +234,15 @@ class AutoTagService:
                         dim_tags = tags.setdefault(dimension, [])
                         tag_value_norm = part_lower
                         if tag_value_norm not in dim_tags:
-                            logger.debug(f"Adding folder tag '{tag_value_norm}' to dimension '{dimension}' for: {path}")
+                            logger.debug(
+                                f"Adding folder tag '{tag_value_norm}' to dimension '{dimension}' for: {path}"
+                            )
                             dim_tags.append(tag_value_norm)
                             modified = True
             except Exception as e:
-                 logger.error(f"Error during folder-based tagging for {path}: {e}", exc_info=False)
+                logger.error(
+                    f"Error during folder-based tagging for {path}: {e}", exc_info=False
+                )
 
         # --- Cleanup: Remove empty tag dimensions ---
         for dimension in list(tags.keys()):

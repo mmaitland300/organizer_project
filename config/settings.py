@@ -3,6 +3,7 @@ Configuration settings for Musicians Organizer.
 
 Centralizes constants, dependency toggles, regex patterns, and tagging rules.
 """
+
 import logging
 import os
 import re
@@ -10,6 +11,7 @@ import warnings
 from typing import Optional, Any, List, Dict, Tuple, Pattern
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
+
 # --- Logging Setup ---
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -40,9 +42,9 @@ BPM_REGEX = re.compile(
 )
 
 # --- Feature toggles ----------------------------------------------------
-ENABLE_ADVANCED_AUDIO_ANALYSIS = True     # used by tests and UI
-ENABLE_FILENAME_TAGGING        = True
-ENABLE_FOLDER_TAGGING          = True
+ENABLE_ADVANCED_AUDIO_ANALYSIS = True  # used by tests and UI
+ENABLE_FILENAME_TAGGING = True
+ENABLE_FOLDER_TAGGING = True
 ENABLE_CONTENT_TAGGING: bool  # defined after dependency imports
 
 # --- Auto-Tagging Parameters ---
@@ -82,28 +84,29 @@ _FOLDER_IGNORE_RE = re.compile(
 )
 FOLDER_STRUCTURE_DEPTH: int = 4
 _RAW_FOLDER_DIMENSION_MAP: Dict[str, str] = {
-    'drums':    'category',
-    'synth':    'category',
-    'vocals':   'category',
-    'guitar':   'category',
-    'bass':     'category',
-    'fx':       'category',
-    'loops':    'type',
-    'oneshots': 'type',
-    'kick':     'instrument',
-    'snare':    'instrument',
-    'hats':     'instrument',
-    'cymbals':  'instrument',
-    '808':      'instrument',
+    "drums": "category",
+    "synth": "category",
+    "vocals": "category",
+    "guitar": "category",
+    "bass": "category",
+    "fx": "category",
+    "loops": "type",
+    "oneshots": "type",
+    "kick": "instrument",
+    "snare": "instrument",
+    "hats": "instrument",
+    "cymbals": "instrument",
+    "808": "instrument",
 }
 # Normalize and validate folder dimension map
-KNOWN_DIMENSIONS = {dim for dim, _ in FILENAME_TAG_PATTERNS} | {'category'}
+KNOWN_DIMENSIONS = {dim for dim, _ in FILENAME_TAG_PATTERNS} | {"category"}
 FOLDER_DIMENSION_MAP: Dict[str, str] = {
-    folder.lower(): dim.lower()
-    for folder, dim in _RAW_FOLDER_DIMENSION_MAP.items()
+    folder.lower(): dim.lower() for folder, dim in _RAW_FOLDER_DIMENSION_MAP.items()
 }
 _invalid_dims = set(FOLDER_DIMENSION_MAP.values()) - KNOWN_DIMENSIONS
-assert not _invalid_dims, f"Unknown tag dimensions in FOLDER_DIMENSION_MAP: {_invalid_dims}"
+assert (
+    not _invalid_dims
+), f"Unknown tag dimensions in FOLDER_DIMENSION_MAP: {_invalid_dims}"
 
 # --- Dependency Toggles & Plugin Imports ---
 TinyTag: Optional[Any]
@@ -125,6 +128,7 @@ except ImportError:
 
 try:
     import matplotlib
+
     matplotlib.use("Qt5Agg")
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -143,32 +147,32 @@ ENABLE_WAVEFORM_PREVIEW = bool(plt and np)
 N_MFCC: int = 13
 
 CORE_FEATURE_KEYS: List[str] = [
-    'brightness',       # Spectral Centroid Mean
-    'loudness_rms',     # RMS Energy Mean
+    "brightness",  # Spectral Centroid Mean
+    "loudness_rms",  # RMS Energy Mean
 ]
 
 SPECTRAL_FEATURE_KEYS: List[str] = [
-    'zcr_mean',             # Zero-Crossing Rate Mean
-    'spectral_contrast_mean', # Mean Spectral Contrast
+    "zcr_mean",  # Zero-Crossing Rate Mean
+    "spectral_contrast_mean",  # Mean Spectral Contrast
 ]
 
-MFCC_FEATURE_KEYS: List[str] = [f'mfcc{i+1}_mean' for i in range(N_MFCC)]
+MFCC_FEATURE_KEYS: List[str] = [f"mfcc{i+1}_mean" for i in range(N_MFCC)]
 
 ADDITIONAL_FEATURE_KEYS: List[str] = [
-    'bit_depth',
-    'loudness_lufs',
-    'pitch_hz',
-    'attack_time',
+    "bit_depth",
+    "loudness_lufs",
+    "pitch_hz",
+    "attack_time",
 ]
 
 # --- Feature Definitions for Database and Display ---
 FEATURE_DEFINITIONS: List[Tuple[str, str]] = [
-    ("brightness",           "Brightness (Spectral Centroid)"),
-    ("loudness_rms",         "Loudness (RMS)"),
-    ("zcr_mean",             "Zero-Crossing Rate"),
-    ("spectral_contrast_mean","Spectral Contrast"),
+    ("brightness", "Brightness (Spectral Centroid)"),
+    ("loudness_rms", "Loudness (RMS)"),
+    ("zcr_mean", "Zero-Crossing Rate"),
+    ("spectral_contrast_mean", "Spectral Contrast"),
     *[(f"mfcc{i+1}_mean", f"MFCC {i+1}") for i in range(N_MFCC)],
-    *[(key, key.replace('_', ' ').title()) for key in ADDITIONAL_FEATURE_KEYS],
+    *[(key, key.replace("_", " ").title()) for key in ADDITIONAL_FEATURE_KEYS],
 ]
 
 ALL_FEATURE_KEYS: List[str] = [key for key, _ in FEATURE_DEFINITIONS]
@@ -177,20 +181,29 @@ FEATURE_DISPLAY_NAMES: Dict[str, str] = dict(FEATURE_DEFINITIONS)
 # Defaults for STFT calculation
 STFT_N_FFT: int = 2048
 STFT_HOP_LENGTH: int = 512
-STFT_WIN_LENGTH: Optional[int] = None # Defaults to n_fft
-STFT_WINDOW: str = 'hann' # Default window function
+STFT_WIN_LENGTH: Optional[int] = None  # Defaults to n_fft
+STFT_WINDOW: str = "hann"  # Default window function
 
 # Cache size for SpectrogramService (number of files/parameter sets)
 SPECTROGRAM_CACHE_SIZE: int = 128
 # Sanity check: display names cover all feature keys
-assert all(key in FEATURE_DISPLAY_NAMES for key in ALL_FEATURE_KEYS), \
-    "Mismatch between ALL_FEATURE_KEYS and FEATURE_DISPLAY_NAMES"
+assert all(
+    key in FEATURE_DISPLAY_NAMES for key in ALL_FEATURE_KEYS
+), "Mismatch between ALL_FEATURE_KEYS and FEATURE_DISPLAY_NAMES"
 
 # --- Database column helpers -------------------------------------------
 # Base columns we persist (excluding autoupdated LAST_SCANNED)
 BASE_DB_COLUMNS = [
-    "file_path", "size", "mod_time", "duration", "bpm",
-    "file_key", "used", "samplerate", "channels", "tags",
+    "file_path",
+    "size",
+    "mod_time",
+    "duration",
+    "bpm",
+    "file_key",
+    "used",
+    "samplerate",
+    "channels",
+    "tags",
 ]
 
 # Public constant expected by tests/test_db_schema_sync.py
@@ -200,17 +213,18 @@ ALL_SAVABLE_COLUMNS = (
     + ["bit_depth", "loudness_lufs", "pitch_hz", "attack_time"]
 )
 
-# ADD Database Configuration 
+# ADD Database Configuration
 # Use environment variable or default
 DEFAULT_DB_PATH = os.path.expanduser("~/.musicians_organizer.db")
 DB_PATH = os.environ.get("MUSICORG_DB_PATH", DEFAULT_DB_PATH)
 DB_URL = f"sqlite:///{DB_PATH}"
 
 STATS_CACHE_FILENAME = os.path.expanduser("~/.musicians_organizer_stats.json")
-# END Database Configuration 
+# END Database Configuration
 
 # ADD Engine Factory Function
 _engine_instance: Optional[Engine] = None
+
 
 def get_engine() -> Engine:
     """Creates and returns a single SQLAlchemy Engine instance."""
@@ -224,8 +238,10 @@ def get_engine() -> Engine:
 
         _engine_instance = create_engine(
             DB_URL,
-            connect_args={'check_same_thread': False}, # Needed for SQLite multithreading
-            echo=False # Set to True for debugging SQL
+            connect_args={
+                "check_same_thread": False
+            },  # Needed for SQLite multithreading
+            echo=False,  # Set to True for debugging SQL
         )
         # Optional: Add PRAGMA event listener here if desired
     return _engine_instance

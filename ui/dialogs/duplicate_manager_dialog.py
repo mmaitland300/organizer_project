@@ -12,6 +12,7 @@ from PyQt5 import QtCore, QtWidgets
 from utils.helpers import bytes_to_unit
 from ui.dialogs.waveform_dialog import WaveformDialog
 
+
 class DuplicateManagerDialog(QtWidgets.QDialog):
     def __init__(
         self,

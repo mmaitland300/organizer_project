@@ -1,18 +1,24 @@
 import unittest
+
 # Assuming AutoTagService is importable, adjust path if needed
 from services.auto_tagger import AutoTagService
+
 
 class TestAutoTagService(unittest.TestCase):
 
     def test_auto_tag(self):
         # Input dictionary
-        file_info = {"path": "C:/Music/Samples/Cool Kick C#m 120bpm.wav"} # Example with key and BPM
+        file_info = {
+            "path": "C:/Music/Samples/Cool Kick C#m 120bpm.wav"
+        }  # Example with key and BPM
 
         # Call the service (modifies file_info in-place)
         modified = AutoTagService.auto_tag(file_info)
 
         # Assert that the function reported modifications were made
-        self.assertTrue(modified, "AutoTagService.auto_tag should return True for changes.")
+        self.assertTrue(
+            modified, "AutoTagService.auto_tag should return True for changes."
+        )
 
         # Assert that the original dictionary was modified correctly
         # Check for 'key' extracted from filename
@@ -30,6 +36,7 @@ class TestAutoTagService(unittest.TestCase):
         # self.assertFalse(modified_no_change, "auto_tag should return False if no changes")
         # self.assertEqual(file_info_no_change["key"], "A") # Ensure existing value not changed
         # self.assertEqual(file_info_no_change["bpm"], 100)
+
 
 # Add if __name__ == '__main__': block if needed for running file directly
 

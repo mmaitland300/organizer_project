@@ -10,10 +10,10 @@ from alembic import context
 
 # --- Project Setup ---
 # Add project root to sys.path to allow importing project modules
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-    print(f"Added project root to sys.path: {PROJECT_ROOT}") # Optional: confirm path
+    print(f"Added project root to sys.path: {PROJECT_ROOT}")  # Optional: confirm path
 
 # --- Alembic Config ---
 config = context.config
@@ -23,7 +23,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Setup basic logging if fileConfig fails or is not used
-logger = logging.getLogger('alembic.env')
+logger = logging.getLogger("alembic.env")
 # logger.setLevel(logging.INFO) # Adjust level as needed
 
 # --- Target Metadata ---
@@ -31,33 +31,38 @@ logger = logging.getLogger('alembic.env')
 try:
     # --->>> Ensure this import path 'services.schema' is correct <<<---
     from services.schema import metadata as target_metadata
+
     logger.info("Successfully imported target_metadata from services.schema")
 except ImportError as e:
     logger.error(
         f"Failed to import target_metadata from services.schema: {e}. "
         "Check PYTHONPATH, sys.path modification, and file existence.",
-        exc_info=True
+        exc_info=True,
     )
     raise SystemExit("Failed to import target metadata from services.schema")
 
 # --- Migration Functions ---
 
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
     if not url:
-        logger.error("Database URL not configured in alembic.ini section [%s]", config.config_ini_section)
+        logger.error(
+            "Database URL not configured in alembic.ini section [%s]",
+            config.config_ini_section,
+        )
         raise ValueError("Database URL must be configured under sqlalchemy.url")
 
     logger.info(f"Running offline migrations with URL: {url}")
     context.configure(
         url=url,
-        target_metadata=target_metadata, # Use imported metadata
+        target_metadata=target_metadata,  # Use imported metadata
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
-        render_as_batch=True, # <<< Enable batch mode for offline too
+        render_as_batch=True,  # <<< Enable batch mode for offline too
     )
 
     logger.info("Beginning offline migration transaction.")
@@ -70,9 +75,12 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     # If tests or other callers passed in an existing engine/connection, use it
     from sqlalchemy.engine import Engine
-    existing = config.attributes.get('connection', None)
+
+    existing = config.attributes.get("connection", None)
     if existing is not None:
-        logger.info("Using existing connection for Alembic migrations (from Config.attributes).")
+        logger.info(
+            "Using existing connection for Alembic migrations (from Config.attributes)."
+        )
         # Determine if it's an Engine (needs .connect()) or already a Connection
         if isinstance(existing, Engine):
             conn = existing.connect()

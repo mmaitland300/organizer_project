@@ -22,6 +22,7 @@ from config.settings import (
 )
 from services.cache_manager import CacheManager
 from services.database_manager import DatabaseManager
+
 # Keep helpers import for key detection (if kept) and potentially hash (if added later)
 from utils.helpers import compute_hash, detect_key_from_filename
 
@@ -49,7 +50,7 @@ class FileScannerService(QtCore.QThread):
     def __init__(
         self,
         root_path: str,
-        db_manager: DatabaseManager, # <<< Accept db_manager instance
+        db_manager: DatabaseManager,  # <<< Accept db_manager instance
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
         """
@@ -62,15 +63,21 @@ class FileScannerService(QtCore.QThread):
         """
         super().__init__(parent)
         if not os.path.isdir(root_path):
-            logger.error(f"Invalid root path provided to FileScannerService: {root_path}")
+            logger.error(
+                f"Invalid root path provided to FileScannerService: {root_path}"
+            )
         self.root_path = root_path
         self._cancelled = False
 
         # --- Use the passed-in db_manager ---
-        self.db = db_manager # <<< Store the passed instance
-        if not self.db or not self.db.engine: # Check if valid manager/engine was passed
-             logger.error("FileScannerService initialized without a valid DatabaseManager/engine.")
-             raise ConnectionError("Database manager is not properly initialized.")
+        self.db = db_manager  # <<< Store the passed instance
+        if (
+            not self.db or not self.db.engine
+        ):  # Check if valid manager/engine was passed
+            logger.error(
+                "FileScannerService initialized without a valid DatabaseManager/engine."
+            )
+            raise ConnectionError("Database manager is not properly initialized.")
         # --- End Modification ---
 
         # Initialize cache manager (keep existing logic)
@@ -86,21 +93,23 @@ class FileScannerService(QtCore.QThread):
         logger.info(f"Starting scan thread for: {self.root_path}")
 
         # Define progress reporting frequency
-        PROGRESS_EMIT_INTERVAL: int = 25 
+        PROGRESS_EMIT_INTERVAL: int = 25
 
         files_info: List[Dict[str, Any]] = []
         to_save_in_db: List[Dict[str, Any]] = []
         seen_paths: set[str] = set()
-        all_discovered_paths: List[str] = [] # Store paths found during walk
+        all_discovered_paths: List[str] = []  # Store paths found during walk
 
         # --- Pre-Scan Preparations ---
         try:
             # Check if root path is valid before proceeding
             if not os.path.isdir(self.root_path):
-                 logger.error(f"Root path does not exist or is not a directory: {self.root_path}")
-                 self.progress.emit(0, 0)
-                 self.finished.emit([])
-                 return
+                logger.error(
+                    f"Root path does not exist or is not a directory: {self.root_path}"
+                )
+                self.progress.emit(0, 0)
+                self.finished.emit([])
+                return
 
             # Get existing DB paths for orphan detection
             logger.debug("Fetching existing file paths from database for this root...")
@@ -111,31 +120,47 @@ class FileScannerService(QtCore.QThread):
             # --- Single Pass Directory Walk to Collect Paths ---
             logger.info("Performing directory walk to collect file paths...")
             walk_error_count = 0
-            for dirpath, _, filenames in os.walk(self.root_path, topdown=True, onerror=lambda e: logger.warning(f"os.walk error: {e}")):
-                if self._cancelled: break
+            for dirpath, _, filenames in os.walk(
+                self.root_path,
+                topdown=True,
+                onerror=lambda e: logger.warning(f"os.walk error: {e}"),
+            ):
+                if self._cancelled:
+                    break
                 for f in filenames:
-                    if self._cancelled: break
+                    if self._cancelled:
+                        break
                     try:
                         # Store the full, normalized path
-                        full_path = os.path.normpath(os.path.abspath(os.path.join(dirpath, f)))
+                        full_path = os.path.normpath(
+                            os.path.abspath(os.path.join(dirpath, f))
+                        )
                         all_discovered_paths.append(full_path)
                     except Exception as path_e:
                         walk_error_count += 1
-                        logger.error(f"Error constructing path in {dirpath} for file {f}: {path_e}", exc_info=False)
-                if self._cancelled: break # Break outer loop too
+                        logger.error(
+                            f"Error constructing path in {dirpath} for file {f}: {path_e}",
+                            exc_info=False,
+                        )
+                if self._cancelled:
+                    break  # Break outer loop too
             if walk_error_count > 0:
-                 logger.warning(f"Encountered {walk_error_count} errors during path collection.")
+                logger.warning(
+                    f"Encountered {walk_error_count} errors during path collection."
+                )
             logger.info(f"Collected {len(all_discovered_paths)} file paths.")
 
         except Exception as setup_e:
-            logger.error(f"Error during scan setup or path collection: {setup_e}", exc_info=True)
+            logger.error(
+                f"Error during scan setup or path collection: {setup_e}", exc_info=True
+            )
             self.progress.emit(0, 0)
             self.finished.emit([])
-            return # Stop execution
+            return  # Stop execution
 
         if self._cancelled:
             logger.info("Scan cancelled during path collection.")
-            self.finished.emit([]) # Emit empty list on cancellation
+            self.finished.emit([])  # Emit empty list on cancellation
             return
 
         # --- Process the Collected File List ---
@@ -148,9 +173,9 @@ class FileScannerService(QtCore.QThread):
                 logger.info("Scan cancelled during file processing.")
                 break
 
-            seen_paths.add(full_path) # Mark path as seen on this scan
+            seen_paths.add(full_path)  # Mark path as seen on this scan
 
-            try: # Process individual file
+            try:  # Process individual file
                 stat = os.stat(full_path)
                 size = stat.st_size
                 mod_time_ts = stat.st_mtime
@@ -159,20 +184,22 @@ class FileScannerService(QtCore.QThread):
                 extension = os.path.splitext(filename)[1].lower()
 
                 needs_processing = True
-                file_data_source = "New/Updated" # For logging
+                file_data_source = "New/Updated"  # For logging
 
                 # 1. Check Cache (if available and cache manager initialized)
-                if self.cache_manager and not self.cache_manager.needs_update(full_path, mod_time_ts, size):
+                if self.cache_manager and not self.cache_manager.needs_update(
+                    full_path, mod_time_ts, size
+                ):
                     cached = self.cache_manager.get(full_path, mod_time_ts, size)
                     if cached:
                         # Ensure default keys exist when loading from cache
-                        cached.setdefault('bpm', None)
-                        cached.setdefault('key', 'N/A')
-                        cached.setdefault('duration', None)
-                        cached.setdefault('used', False)
-                        cached.setdefault('tags', {})
-                        cached.setdefault('samplerate', None)
-                        cached.setdefault('channels', None)
+                        cached.setdefault("bpm", None)
+                        cached.setdefault("key", "N/A")
+                        cached.setdefault("duration", None)
+                        cached.setdefault("used", False)
+                        cached.setdefault("tags", {})
+                        cached.setdefault("samplerate", None)
+                        cached.setdefault("channels", None)
                         # Add feature keys if they might be missing from old cache?
                         # for f_key in ALL_FEATURE_KEYS: cached.setdefault(f_key, None) # If needed
                         files_info.append(cached)
@@ -182,26 +209,41 @@ class FileScannerService(QtCore.QThread):
                 # 2. Check Database (if not found in cache)
                 if needs_processing:
                     # Use the pre-fetched list for efficiency
-                    existing_rec = next((rec for rec in existing_db_records if rec['path'] == full_path), None)
+                    existing_rec = next(
+                        (
+                            rec
+                            for rec in existing_db_records
+                            if rec["path"] == full_path
+                        ),
+                        None,
+                    )
                     if existing_rec and existing_rec.get("mod_time") == mod_time:
                         # Ensure default keys exist when loading from DB
-                        existing_rec.setdefault('bpm', None)
-                        existing_rec.setdefault('key', 'N/A')
+                        existing_rec.setdefault("bpm", None)
+                        existing_rec.setdefault("key", "N/A")
                         # ... other defaults ...
                         files_info.append(existing_rec)
                         needs_processing = False
                         file_data_source = "DB (Unchanged)"
                         # Optionally update cache if DB was used
                         if self.cache_manager:
-                            self.cache_manager.update(full_path, mod_time_ts, size, existing_rec)
+                            self.cache_manager.update(
+                                full_path, mod_time_ts, size, existing_rec
+                            )
 
                 # 3. Process New/Updated File
                 if needs_processing:
                     file_info: Dict[str, Any] = {
-                        "path": full_path, "size": size, "mod_time": mod_time,
-                        "duration": None, "key": "N/A", "used": False,
+                        "path": full_path,
+                        "size": size,
+                        "mod_time": mod_time,
+                        "duration": None,
+                        "key": "N/A",
+                        "used": False,
                         "tags": {"filetype": [extension]} if extension else {},
-                        "samplerate": None, "channels": None, "bpm": None
+                        "samplerate": None,
+                        "channels": None,
+                        "bpm": None,
                         # Initialize feature keys? Not strictly needed if DB allows NULLs
                     }
 
@@ -219,7 +261,8 @@ class FileScannerService(QtCore.QThread):
                     # Optional: Key detection from filename
                     try:
                         detected_key = detect_key_from_filename(full_path)
-                        if detected_key: file_info["key"] = detected_key
+                        if detected_key:
+                            file_info["key"] = detected_key
                     except Exception as key_e:
                         logger.warning(f"Key detection error {full_path}: {key_e}")
 
@@ -228,38 +271,54 @@ class FileScannerService(QtCore.QThread):
                     files_info.append(file_info)
                     to_save_in_db.append(file_info)
                     if self.cache_manager:
-                        self.cache_manager.update(full_path, mod_time_ts, size, file_info)
+                        self.cache_manager.update(
+                            full_path, mod_time_ts, size, file_info
+                        )
 
                 logger.debug(f"Processed: {filename} (Source: {file_data_source})")
 
             # --- Error Handling for Individual Files ---
             except FileNotFoundError:
-                 logger.warning(f"File not found during processing (likely deleted after walk): {full_path}")
-                 # Remove from seen_paths if it was added but now missing
-                 if full_path in seen_paths: seen_paths.remove(full_path)
+                logger.warning(
+                    f"File not found during processing (likely deleted after walk): {full_path}"
+                )
+                # Remove from seen_paths if it was added but now missing
+                if full_path in seen_paths:
+                    seen_paths.remove(full_path)
             except PermissionError:
-                 logger.warning(f"Permission denied for file: {full_path}")
+                logger.warning(f"Permission denied for file: {full_path}")
             except OSError as os_e:
-                 logger.error(f"OS error processing file {full_path}: {os_e}", exc_info=False)
+                logger.error(
+                    f"OS error processing file {full_path}: {os_e}", exc_info=False
+                )
             except Exception as e:
-                logger.error(f"Unexpected error processing file {full_path}: {e}", exc_info=True)
+                logger.error(
+                    f"Unexpected error processing file {full_path}: {e}", exc_info=True
+                )
 
             # --- Emit Progress ---
-            if current_count % PROGRESS_EMIT_INTERVAL == 0 or current_count >= total_files:
-                 if total_files > 0:
-                      logger.debug(f"Emitting scan progress: {current_count}/{total_files}")
-                      self.progress.emit(current_count, total_files)
-                 # If total_files is 0, this loop won't run, handled earlier.
+            if (
+                current_count % PROGRESS_EMIT_INTERVAL == 0
+                or current_count >= total_files
+            ):
+                if total_files > 0:
+                    logger.debug(
+                        f"Emitting scan progress: {current_count}/{total_files}"
+                    )
+                    self.progress.emit(current_count, total_files)
+                # If total_files is 0, this loop won't run, handled earlier.
         # --- End File Processing Loop ---
 
         if self._cancelled:
             logger.info("Scan cancelled before final operations.")
             # Cache might have partial updates, flushing might be okay or skip? Skip for now.
-            self.finished.emit(files_info) # Emit whatever was collected
+            self.finished.emit(files_info)  # Emit whatever was collected
             return
 
         # --- Final Operations ---
-        logger.info("File processing finished. Finalizing cache, saving records, deleting orphans.")
+        logger.info(
+            "File processing finished. Finalizing cache, saving records, deleting orphans."
+        )
         try:
             if self.cache_manager:
                 self.cache_manager.flush()
@@ -284,8 +343,12 @@ class FileScannerService(QtCore.QThread):
                     self.db.delete_file_record(orphan)
                     deleted_count += 1
                 except Exception as del_e:
-                     logger.error(f"Error deleting orphan record {orphan}: {del_e}", exc_info=True)
-            logger.info(f"Finished deleting {deleted_count} of {len(orphan_paths)} orphan records.")
+                    logger.error(
+                        f"Error deleting orphan record {orphan}: {del_e}", exc_info=True
+                    )
+            logger.info(
+                f"Finished deleting {deleted_count} of {len(orphan_paths)} orphan records."
+            )
         else:
             logger.info("No orphan records found to delete.")
 
@@ -293,11 +356,13 @@ class FileScannerService(QtCore.QThread):
         logger.info("Sending final progress and finished signals.")
         # Use the actual number processed for final progress if total_files was 0 initially
         final_total = total_files if total_files > 0 else current_count
-        final_current = current_count # current_count reflects processed items
-        if final_total >= 0 :
-             self.progress.emit(final_current, final_total) # Show actual processed / total
+        final_current = current_count  # current_count reflects processed items
+        if final_total >= 0:
+            self.progress.emit(
+                final_current, final_total
+            )  # Show actual processed / total
         else:
-             self.progress.emit(0,0)
+            self.progress.emit(0, 0)
 
         self.finished.emit(files_info)
         logger.info("FileScannerService finished run method.")
@@ -305,6 +370,6 @@ class FileScannerService(QtCore.QThread):
     # --- Cancellation ---
     def cancel(self) -> None:
         """Requests cancellation of the scanning process."""
-        if not self._cancelled: # Prevent multiple log messages
-             self._cancelled = True
-             logger.info("Scan cancellation requested.")
+        if not self._cancelled:  # Prevent multiple log messages
+            self._cancelled = True
+            logger.info("Scan cancellation requested.")

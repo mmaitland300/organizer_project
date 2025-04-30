@@ -2,14 +2,18 @@
 import os
 import pytest
 import logging
-from sqlalchemy import create_engine, text # Ensure 'text' is imported if using raw SQL cleanup
+from sqlalchemy import (
+    create_engine,
+    text,
+)  # Ensure 'text' is imported if using raw SQL cleanup
 from sqlalchemy.engine import Engine
-from typing import Generator # Import Generator for type hint fix
+from typing import Generator  # Import Generator for type hint fix
 
 # --- Alembic Imports ---
 try:
     from alembic.config import Config
     from alembic import command
+
     ALEMBIC_AVAILABLE = True
 except ImportError:
     ALEMBIC_AVAILABLE = False
@@ -18,8 +22,9 @@ except ImportError:
 
 # Import the DatabaseManager class (ensure path is correct)
 from services.database_manager import DatabaseManager
+
 # --- ADD Import for table object ---
-from services.schema import files_table # <<< Import your table object
+from services.schema import files_table  # <<< Import your table object
 
 # --- Configuration ---
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -29,17 +34,16 @@ logger = logging.getLogger("pytest_db_setup")
 
 # --- Fixtures ---
 
+
 @pytest.fixture(scope="session")
 # Update return type hint
 def test_engine() -> Generator[Engine, None, None]:
-    """ Session-scoped engine fixture """
+    """Session-scoped engine fixture"""
     if not os.path.exists(ALEMBIC_INI_PATH):
         pytest.fail(f"Alembic config not found at: {ALEMBIC_INI_PATH}")
     logger.info(f"Creating test engine for URL: {TEST_DATABASE_URL}")
     engine = create_engine(
-        TEST_DATABASE_URL,
-        connect_args={'check_same_thread': False},
-        echo=False
+        TEST_DATABASE_URL, connect_args={"check_same_thread": False}, echo=False
     )
     yield engine
     logger.info("Disposing test engine.")
@@ -48,13 +52,13 @@ def test_engine() -> Generator[Engine, None, None]:
 
 @pytest.fixture(scope="session")
 def apply_migrations(test_engine: Engine):
-    """ Session-scoped fixture to apply migrations """
+    """Session-scoped fixture to apply migrations"""
     if not ALEMBIC_AVAILABLE:
         pytest.skip("Alembic not installed, skipping migration application.")
     logger.info(f"Applying migrations using config: {ALEMBIC_INI_PATH}")
     alembic_cfg = Config(ALEMBIC_INI_PATH)
-    alembic_cfg.set_main_option('sqlalchemy.url', TEST_DATABASE_URL)
-    alembic_cfg.attributes['connection'] = test_engine
+    alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+    alembic_cfg.attributes["connection"] = test_engine
     try:
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migrations applied successfully to test database.")
@@ -66,14 +70,16 @@ def apply_migrations(test_engine: Engine):
 
 @pytest.fixture(scope="function")
 # Update return type hint
-def db_manager(test_engine: Engine, apply_migrations) -> Generator[DatabaseManager, None, None]:
+def db_manager(
+    test_engine: Engine, apply_migrations
+) -> Generator[DatabaseManager, None, None]:
     """
     Provides a DatabaseManager instance for each test function
     and CLEARS the 'files' table after the test runs.
     """
-    _ = apply_migrations # Ensure migrations ran
+    _ = apply_migrations  # Ensure migrations ran
     manager = DatabaseManager(engine=test_engine)
-    yield manager # Provide the manager instance to the test
+    yield manager  # Provide the manager instance to the test
 
     # --- Teardown / Cleanup Code ---
     # This code runs after the test function using this fixture finishes
@@ -81,7 +87,7 @@ def db_manager(test_engine: Engine, apply_migrations) -> Generator[DatabaseManag
     try:
         # Use the same session-scoped engine to clear the table
         with test_engine.connect() as connection:
-            with connection.begin(): # Use a transaction for the delete
+            with connection.begin():  # Use a transaction for the delete
                 # Use SQLAlchemy Core delete statement for the specific table
                 delete_stmt = files_table.delete()
                 connection.execute(delete_stmt)
@@ -89,6 +95,8 @@ def db_manager(test_engine: Engine, apply_migrations) -> Generator[DatabaseManag
                 # connection.execute(text("DELETE FROM files;"))
         logger.debug("'files' table cleared successfully.")
     except Exception as e:
-        logger.error(f"Error clearing 'files' table in fixture teardown: {e}", exc_info=True)
+        logger.error(
+            f"Error clearing 'files' table in fixture teardown: {e}", exc_info=True
+        )
         # Optionally fail tests if cleanup fails:
         # pytest.fail(f"Failed to clean up database: {e}")
