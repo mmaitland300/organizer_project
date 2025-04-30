@@ -116,13 +116,15 @@ class ScanController(QObject):
         self.state = ControllerState.Idle # Always go to Idle when finished/cancelled
         self.stateChanged.emit(self.state)
 
+        # --- Emit results regardless of cancellation ---
+        # The 'files' argument contains the list processed up to the point
+        # the worker detected cancellation or finished normally.
         if was_cancelling:
-             logger.info("Scan finished after cancellation request.")
-             # May emit empty list or partial results depending on scanner's cancel behavior
-             self.finished.emit([]) # Emit empty list if cancelled is desired outcome
+            logger.info("Scan finished after cancellation request.")
         else:
-             logger.info("Scan finished normally.")
-             self.finished.emit(files) # Emit results normally
+            logger.info("Scan finished normally.")
+            
+        self.finished.emit(files) # Emit the (potentially partial) results
 
         self._scanner = None # Clear scanner reference
         logger.debug("ScanController finished processing.")

@@ -5,6 +5,9 @@ using librosa, soundfile, and pyloudnorm, supporting cancellation.
 """
 
 import logging
+import sys # Add sys import
+print(f"--- analysis_engine.py --- sys.path: {sys.path}") # Print path when imported
+
 import os
 import re
 # *** Import Event type hint ***
@@ -13,15 +16,16 @@ from typing import Any, Dict, Optional, Union, List # Added List
 
 # Import Constants
 try:
-    from config.settings import N_MFCC, ALL_FEATURE_KEYS, NEW_FEATURE_KEYS
-    # Ensure ALL_EXPECTED_KEYS includes all possible features
-    ALL_EXPECTED_KEYS = list(set(ALL_FEATURE_KEYS + NEW_FEATURE_KEYS + ['bpm'])) # Add bpm if not already there
+    # Import the correct name: ADDITIONAL_FEATURE_KEYS instead of NEW_FEATURE_KEYS
+    from config.settings import N_MFCC, ALL_FEATURE_KEYS, ADDITIONAL_FEATURE_KEYS
+    ALL_EXPECTED_KEYS = list(set(ALL_FEATURE_KEYS + ADDITIONAL_FEATURE_KEYS + ['bpm'])) # Use the correct name here too
+
 except ImportError:
     logging.critical("Could not import settings. Analysis Engine may fail.")
     # Fallbacks
     ALL_FEATURE_KEYS = ['brightness', 'loudness_rms', 'zcr_mean', 'spectral_contrast_mean']
-    NEW_FEATURE_KEYS = ['bit_depth', 'loudness_lufs', 'pitch_hz', 'attack_time']
-    ALL_EXPECTED_KEYS = list(set(ALL_FEATURE_KEYS + NEW_FEATURE_KEYS + ['bpm']))
+    ADDITIONAL_FEATURE_KEYS = ['bit_depth', 'loudness_lufs', 'pitch_hz', 'attack_time'] # Adjust fallback variable name if needed for consistency
+    ALL_EXPECTED_KEYS = list(set(ALL_FEATURE_KEYS + ADDITIONAL_FEATURE_KEYS + ['bpm']))
     N_MFCC = 13
 
 # Dependency Checks & Imports (ensure numpy is imported as np)

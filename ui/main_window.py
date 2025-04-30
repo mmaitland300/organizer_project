@@ -1040,7 +1040,15 @@ class MainWindow(QtWidgets.QMainWindow):
         """Handles state changes from Scan, Duplicates, Analysis controllers."""
         sender_controller = self.sender() # Get the controller that emitted the signal
         controller_name = sender_controller.__class__.__name__ if sender_controller else "Unknown Controller"
-        logger.debug(f"on_controller_state_changed received for {controller_name}: New State={state}") # Log sender and state
+        logger.debug(f"State changed for {controller_name}: New State={state}")
+
+        # Check if the controller is the AnalysisController and it just became Idle
+        # after having been requested to cancel.
+        if isinstance(sender_controller, AnalysisController) and state == ControllerState.Idle:
+            if sender_controller.was_cancelled():
+                logger.info(f"{controller_name} finished after cancellation. Resetting progress bar.")
+                self.progressBar.setValue(0) # Reset progress bar to 0
+
         self._update_ui_state()
 
     @pyqtSlot(QMediaPlayer.State)  # Connected to QMediaPlayer.stateChanged
