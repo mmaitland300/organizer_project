@@ -1,4 +1,4 @@
-# Musicians Organizer v1.4.1
+# Musicians Organizer v1.5.0
 
 **Musicians Organizer** is a desktop tool designed for music producers, sound engineers, or anyone with large music or audio sample libraries. It helps scan, organize, analyze, and manage your audio files efficiently. Features include detailed metadata viewing, advanced filtering, duplicate detection, audio feature analysis, similarity-based recommendations, audio previewing, and basic DAW integration.
 
