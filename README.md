@@ -1,61 +1,106 @@
-# Musicians Organizer
+# Musicians Organizer v1.4.1
 
-**Musicians Organizer** is a tool designed for music producers, sound engineers, or music lovers with large, unmanageable music/sample libraries. It helps you clean up your folders, view detailed file information, detect duplicates, auto-tag audio samples, preview sounds, and even integrates with your DAW.
+**Musicians Organizer** is a desktop tool designed for music producers, sound engineers, or anyone with large music or audio sample libraries. It helps scan, organize, analyze, and manage your audio files efficiently. Features include detailed metadata viewing, advanced filtering, duplicate detection, audio feature analysis, similarity-based recommendations, audio previewing, and basic DAW integration.
 
 ---
 
-## What It Does
+## Features
 
-- **Scan Your Folders:**  
-  Recursively scans directories and gathers file details such as size, name, modification date, and audio metadata (duration, sample rate, channels).
-
-- **Filtering & Searching:**  
-  Filter files by name or view only unused samples.
-
-- **Duplicate Detection:**  
-  Detects and groups duplicate files based on MD5 hashing. The duplicate search runs in the background with progress feedback so the UI stays responsive.
-
-- **Audio Preview & Waveform Display:**  
-  Preview audio samples and view an embedded waveform display for quick inspection of your sounds.
-
-- **Auto-Tagging & Recommendations:**  
-  Automatically tag audio files by detecting BPM and musical key, and receive recommendations for similar samples.
-
-- **DAW Integration:**  
-  Easily send your selected samples directly to your DAW for a smooth production workflow.
-
-- **Customizable Themes:**  
-  Switch between a modern light theme (default) and dark mode to suit your preferences.
-
-- **Persistent Settings:**  
-  User preferences (window size, last scanned folder, theme, etc.) are saved automatically between sessions.
+* **Efficient Folder Scanning:** Recursively scans directories using background threads, gathering file details (path, size, modification date) and basic audio metadata (duration, sample rate, channels via TinyTag). Syncs metadata with a persistent database.
+* **Persistent Metadata Storage:** Uses an SQLite database (managed via SQLAlchemy) to store file paths, metadata, tags, and extracted audio features, allowing for quick reloading and analysis.
+* **Advanced Filtering & Searching:** Filter files dynamically by:
+    * Filename substring
+    * Musical Key (e.g., "Cm", "F#")
+    * BPM range
+    * Tag text (substring search across all tags)
+    * "Used" status
+    * LUFS loudness range
+    * Bit Depth
+    * Pitch (Hz) range
+    * Attack Time (ms) range
+* **Duplicate Detection:** Identifies potential duplicate audio files based on file size and MD5 hash comparison (hashing performed in background). Provides a dialog to manage and delete duplicates.
+* **Advanced Audio Analysis:** Extracts a range of audio features using Librosa in a background process:
+    * Core features: Brightness (Spectral Centroid), Loudness (RMS)
+    * Spectral features: Zero-Crossing Rate, Spectral Contrast
+    * MFCCs (1-13)
+    * Additional features: Bit Depth, Loudness (LUFS), Pitch (Hz), Attack Time
+* **Similarity Recommendations:** Finds samples similar to a selected file based on the calculated advanced audio features using a Z-score scaled Euclidean distance.
+* **Audio Preview & Waveform Display:** Preview audio files directly within the application. View interactive waveform plots with playback controls.
+* **Multi-Dimensional Tagging:** Organise files using tags with dimensions (e.g., `instrument:KICK`, `mood:DARK`) or general tags. Includes an editor for managing tags. Auto-tags key/bpm based on filename patterns.
+* **DAW Integration:** Simple "Send to Cubase" feature copies selected files to a predefined folder.
+* **Customizable Themes:** Switch between light (default) and dark themes.
+* **Persistent Settings:** Remembers window geometry, last scanned folder, theme preference, and other settings between sessions.
 
 ---
 
 ## Project Structure
-
-The project is now organized into multiple directories for better maintainability:
-
-musicians_organizer/              # Project root  
-├── main.py                       # Entry point script  
-├── config/  
-│   ├── __init__.py  
-│   └── settings.py               # Global configuration & dependency checks  
-├── core/  
-│   ├── __init__.py  
-│   └── file_scanner.py           # File scanning threads & duplicate finder  
-├── models/  
-│   ├── __init__.py  
-│   └── file_model.py             # FileTableModel and FileFilterProxyModel  
-├── ui/  
-│   ├── __init__.py  
-│   └── main_window.py            # MainWindow and related dialogs/widgets  
-├── utils/  
-│   ├── __init__.py  
-│   ├── cache_manager.py          # CacheManager class for metadata caching  
-│   └── helpers.py                # Utility functions (tag parsing, formatting, etc.)  
-└── tests/                        # Unit tests (pytest)
-
+```text
+MUSICIANS_ORGANIZER/
+├── alembic.ini
+├── README.md
+├── config/
+│   ├── __init__.py
+│   └── settings.py
+├── migrations/
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
+│       ├── __init__.py
+│       ├── 60ec2f724e78_check_schema_sync.py
+│       ├── 5663b07ada03_add_bit_depth_lufs_columns.py
+│       ├── a970f5188eb3_add_audio_feature_columns.py
+│       ├── a39924643879_create_files_table.py
+│       └── c09c5f22a86d_add_indexes_to_feature_columns.py
+├── models/
+│   ├── __init__.py
+│   └── file_model.py
+├── services/
+│   ├── __init__.py
+│   ├── advanced_analysis_worker.py
+│   ├── analysis_engine.py
+│   ├── auto_tagger.py
+│   ├── cache_manager.py
+│   ├── database_manager.py
+│   ├── duplicate_finder.py
+│   ├── file_scanner.py
+│   ├── hash_worker.py
+│   ├── schema.py
+│   └── waveform_plotter.py
+├── ui/
+│   ├── __init__.py
+│   ├── controllers.py
+│   ├── main_window.py
+│   └── dialogs/
+│       ├── __init__.py
+│       ├── duplicate_manager_dialog.py
+│       ├── feature_view_dialog.py
+│       ├── multi_dim_tag_editor_dialog.py
+│       ├── waveform_dialog.py
+│       └── waveform_player_widget.py
+├── utils/
+│   ├── __init__.py
+│   └── helpers.py
+└── tests/
+    ├── __init__.py
+    ├── conftest.py
+    ├── pytest.ini
+    ├── __pycache__/
+    ├── pytest_cache/
+    ├── test_advanced_analysis.py
+    ├── test_audio_processor.py
+    ├── test_auto_tagger.py
+    ├── test_cache_manager.py
+    ├── test_config_settings.py
+    ├── test_database_manager.py
+    ├── test_db_schema_sync.py
+    ├── test_duplicate_finder.py
+    ├── test_file_filter_proxy.py
+    ├── test_file_model.py
+    ├── test_file_scanner.py
+    ├── test_helpers.py
+    ├── test_ui_main_window.py
+    └── test_waveform_plotter.py
+```
 ---
 
 ## Getting Started
@@ -64,92 +109,108 @@ Follow these steps to get Musicians Organizer up and running on your machine.
 
 ### Prerequisites
 
-- **Python 3.11+** is recommended to work with the latest libraries (e.g., librosa).
-- [pip](https://pip.pypa.io/en/stable/) installed.
-- (Optional) [virtualenv](https://virtualenv.pypa.io/en/latest/) or the built‑in venv module.
+* **Python 3.11+** is recommended.
+* [pip](https://pip.pypa.io/en/stable/) (Python package installer).
+* Git version control system.
 
----
+### Installation
 
-## Installation
+1.  **Clone the Repository**
+    (Replace the URL if your repository is hosted elsewhere)
+    ```bash
+    git clone <your-repository-url> musicians_organizer
+    cd musicians_organizer
+    ```
 
-#### Clone the Repository
+2.  **Set Up Virtual Environment & Install Dependencies**
+    It's highly recommended to use a virtual environment. From the project root (`musicians_organizer/`):
 
-Open your terminal and run:
+    * **Windows (PowerShell):**
+        ```bash
+        python -m venv venv
+        .\venv\Scripts\Activate.ps1
+        pip install -r requirements.txt
+        ```
+    * **Windows (Command Prompt):**
+        ```bash
+        python -m venv venv
+        .\venv\Scripts\activate.bat
+        pip install -r requirements.txt
+        ```
+    * **macOS / Linux (Bash/Zsh):**
+        ```bash
+        python3 -m venv venv
+        source venv/bin/activate
+        pip install -r requirements.txt
+        ```
 
-    git clone https://github.com/mmaitland300/organizer_project.git
-    cd organizer_project
-
-Since the current repository contains the old single‑file version, we recommend creating a backup branch for it before integrating the new version. (See instructions in the Git guide below.)
-
-#### Set Up the Virtual Environment and Install Dependencies
-
-##### On Windows
-
-    python3.11 -m venv venv
-    .\venv\Scripts\Activate.ps1    # Use Activate.bat if using cmd.exe
-    pip install -r requirements.txt
-
-##### On Linux (Debian/Ubuntu)
-
-    python3.11 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-    # For audio-related dependencies, install additional libraries:
+3.  **Linux Additional Dependencies (Example for Debian/Ubuntu):**
+    Audio playback and some analysis features might require extra system libraries.
+    ```bash
     sudo apt update
-    sudo apt install libpulse-mainloop-glib0 libpulse-dev
-    sudo apt install libqt5multimedia5-plugins \
-                     gstreamer1.0-plugins-base \
-                     gstreamer1.0-plugins-good \
-                     gstreamer1.0-plugins-bad \
-                     gstreamer1.0-plugins-ugly \
-                     gstreamer1.0-libav \
-                     ffmpeg
+    sudo apt install -y libsndfile1 # For soundfile/librosa audio loading
+    ```
+
+    ```bash
+    sudo apt install -y libqt5multimedia5-plugins gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav ffmpeg libpulse-dev
+    ```
+    (Note: Specific libraries might vary slightly based on Linux distribution and version).
+
+4.  **Database Setup:**
+    The application uses Alembic for database migrations. The first time you run the application, the database file (`~/.musicians_organizer.db` by default) should be created. To ensure the schema is up-to-date, you can optionally run migrations manually (ensure `alembic.ini` points to the correct database URL if not using the default):
+    ```bash
+    # While venv is active
+    alembic upgrade head
+    ```
 
 ---
 
-## Running the Application
+### Running the Application
 
-simply run:
+Ensure your virtual environment is activated, then run:
 
-    python main.py
+```bash
+python main.py
+```
+### Packaging the Application
+To create a standalone executable using PyInstaller (make sure it's installed: pip install pyinstaller):
 
-This launches the GUI for Musicians Organizer.
+Bash
 
----
+### Run from the project root directory
 
-## Packaging the Application
+```bash
+pyinstaller --noconfirm --onefile --windowed main.py
+```
 
-To package the application into a standalone executable using PyInstaller:
+The executable will be located in the dist/ folder. Note that packaging applications with complex dependencies like audio libraries and Qt can sometimes require adjustments to the PyInstaller spec file.
 
-1. Ensure you have installed PyInstaller:
-   
-       pip install pyinstaller
+Running Tests
+The project uses pytest. To run the test suite:
 
-2. Run PyInstaller from the project root:
+Activate your virtual environment.
+Run pytest from the project root directory:
+```Bash
+pytest
+```
+Or use the command you ran successfully:
+```Bash
+pytest --maxfail=1 --disable-warnings -q
+```
+Future Improvements / Ideas
+Refine UI/UX, potentially add more visual feedback during long operations.
+Optimize performance for scanning and analysis on very large libraries.
+Expand auto-tagging capabilities (e.g., genre detection based on audio features).
+More sophisticated similarity search options (e.g., feature weighting).
+Allow editing of more metadata fields directly in the table.
+Add support for different database backends (e.g., PostgreSQL).
+Improve packaging process for easier distribution.
 
-       pyinstaller --noconfirm --onefile --windowed main.py
+**Summary of Key Updates:**
 
-This generates a standalone executable in the `dist/` folder.
-
----
-
-## Running Tests
-
-A comprehensive suite of unit tests using pytest is provided in the `tests/` folder. To run the tests:
-
-1. Activate your virtual environment as described above.
-2. Run:
-
-       pytest --maxfail=1 --disable-warnings -q
-
-This ensures that all core components and functionalities are working correctly.
-
----
-
-## Future Improvements
-
-- **Enhanced Audio Metadata Analysis:** Integrate additional libraries to extract more detailed audio metadata and allow in-app editing.
-- **Extended Duplicate Detection:** Improve the asynchronous processing and add cancellation capabilities for long-running scans.
-- **User Preferences:** Develop a dedicated settings/preferences dialog for fine-tuning parameters without modifying configuration files directly.
-- **UI Enhancements:** Modernize the GUI and add in-app logging for better diagnostics.
-
+* Added version number.
+* Updated the "Features" section to accurately reflect current capabilities, including advanced filtering, detailed audio analysis (LUFS, Pitch, etc.), similarity search based on features, and the underlying database.
+* Corrected the "Project Structure" section based on the directory layout you provided.
+* Updated the "Installation" section to use a generic repository URL placeholder and reflect standard venv setup. Added database setup step using Alembic.
+* Updated the "Running Tests" section command.
+* Refreshed the "Future Improvements" section.

@@ -6,6 +6,7 @@ import shutil
 
 # Import Enum if ControllerState is used (it is)
 from enum import Enum  # Ensure this is imported
+import time
 from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -505,8 +506,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.anal_ctrl.started.connect(lambda: self.on_task_started("Analysis"))
         self.anal_ctrl.progress.connect(
             self.on_advanced_analysis_progress
-        )  # Use specific progress slot
-        self.anal_ctrl.finished.connect(self.onAdvancedAnalysisFinished)
+        )
+
+        self.anal_ctrl.analysis_data_finished.connect(self.onAdvancedAnalysisFinished) # New signal name
         self.anal_ctrl.error.connect(self.on_task_error)
         self.anal_ctrl.stateChanged.connect(self.on_controller_state_changed)
 
@@ -1390,33 +1392,43 @@ class MainWindow(QtWidgets.QMainWindow):
         settings.setValue("theme", self.theme)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        # Optional: Check if any controllers are busy and warn user?
+        """ Handles application close event. Attempts to cancel background tasks. """
+        logger.info("Close event triggered.")
+        # Check if any task is running
         is_busy = (
             self.scan_ctrl.state != ControllerState.Idle
             or self.dup_ctrl.state != ControllerState.Idle
             or self.anal_ctrl.state != ControllerState.Idle
+            # Add self._is_calculating_stats if that should prevent closing
         )
+
         if is_busy:
+            # Ask confirmation only if tasks are running
             reply = QMessageBox.question(
                 self,
                 "Confirm Exit",
-                "A background task is still running. Are you sure you want to exit?",
+                "A background task is running.\nExiting now will attempt to stop it.\n\nAre you sure you want to exit?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
             if reply == QMessageBox.No:
+                logger.info("Close event ignored by user.")
                 event.ignore()
                 return
             else:
-                # Try to cancel tasks before closing
-                self.stopPreview()  # Attempt cancellation
+                # If user confirms exit OR if no task was busy initially:
+                logger.info("Attempting to cancel background tasks before closing...")
+                # Request cancellation for all potentially running tasks
+                if self.scan_ctrl.state != ControllerState.Idle: self.scan_ctrl.cancel()
+                if self.dup_ctrl.state != ControllerState.Idle: self.dup_ctrl.cancel()
+                if self.anal_ctrl.state != ControllerState.Idle: self.anal_ctrl.cancel()
+                # *** REMOVED explicit wait() loop ***
+                # Rely on controller/worker cleanup via signals and context managers
+                logger.info("Cancellation requested for running tasks.")
 
+        # Proceed with saving settings and accepting the close event
         self.saveSettings()
-        logger.info("Exiting application.")
-        # Explicitly delete controllers to potentially help with thread cleanup? Usually parent handles it.
-        # del self.scan_ctrl
-        # del self.dup_ctrl
-        # del self.anal_ctrl
+        logger.info("Accepting close event. Exiting application.")
         event.accept()
 
     # --- UI State Update Logic ---

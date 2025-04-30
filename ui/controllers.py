@@ -5,7 +5,8 @@ from collections import OrderedDict
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+from PyQt5 import QtCore # Ensure QtCore is imported
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot # Import pyqtSlot
 
 from config.settings import AUDIO_EXTENSIONS
 from services.advanced_analysis_worker import AdvancedAnalysisWorker
@@ -184,94 +185,122 @@ class DuplicatesController(QObject):
 
 
 class AnalysisController(QObject):
-    """
-    Encapsulates advanced DSP analysis functionality.
-    """
-
+    """ Encapsulates advanced DSP analysis functionality. """
     started = pyqtSignal()
     progress = pyqtSignal(int, int)
-    finished = pyqtSignal(list)
+    # Custom signal carrying data when worker's *run* method finishes processing
+    analysis_data_finished = pyqtSignal(list)
     error = pyqtSignal(str)
     stateChanged = pyqtSignal(object)
 
-    # --- MODIFY: Update __init__ ---
-    def __init__(self, db_manager: DatabaseManager, parent: QObject = None) -> None: # <<< Accept db_manager
+    def __init__(self, db_manager: DatabaseManager, parent: QObject = None) -> None:
         super().__init__(parent)
         self._worker: Optional[AdvancedAnalysisWorker] = None
         self.state = ControllerState.Idle
         self._was_cancelled: bool = False
-        self.db_manager = db_manager # <<< Store db_manager
+        self.db_manager = db_manager
 
     def start_analysis(self, files_info: List[Dict[str, Any]]) -> None:
         """ Begin advanced analysis on the provided file info list. """
+        if self.state != ControllerState.Idle:
+            logger.warning("AnalysisController: Cannot start analysis, already running.")
+            # Optionally emit an error or just return
+            # self.error.emit("Analysis is already in progress.")
+            return
+
         if not self.db_manager or not self.db_manager.engine:
             err_msg = "DatabaseManager not initialized in AnalysisController."
             logger.error(err_msg)
             self.error.emit(err_msg)
             return
 
-        self._was_cancelled = False
+        self._was_cancelled = False # Reset cancellation flag
         try:
-            if self._worker and self._worker.isRunning():
-                 logger.warning("AnalysisController: Cancelling previous worker before starting new one.")
-                 self.cancel()
-
-            # --- MODIFY THIS LINE ---
-            # Pass the stored db_manager when creating the worker
+            # Create the worker instance
             self._worker = AdvancedAnalysisWorker(files_info, db_manager=self.db_manager)
-            # --- End Modification ---
 
+            # --- Connect Signals ---
+            # Connect worker's data/progress/error signals to controller's signals
             self._worker.progress.connect(self.progress)
-            self._worker.finished.connect(self._on_finished)
+            self._worker.error.connect(self.error)
+
+            # Connect the worker's *renamed custom* signal (carrying data) to the data handler
+            self._worker.analysisComplete.connect(self._on_worker_data_finished)
+
+            # Connect the *built-in* QThread.finished signal for cleanup (no arguments)
+            self._worker.finished.connect(self._on_worker_thread_finished) # Built-in signal
+            self._worker.error.connect(self._on_worker_thread_finished) # Cleanup on error too
+
+            # Automatically delete the QThread object once its run() has completed
+            self._worker.finished.connect(self._worker.deleteLater)
+
+            # Update state and start thread
             self.state = ControllerState.Running
             self.stateChanged.emit(self.state)
             self.started.emit()
             self._worker.start()
+            logger.info("Analysis worker started.")
+
         except Exception as e:
              logger.error(f"Analysis start failed: {e}", exc_info=True)
+             self._worker = None # Ensure worker is None if start fails
              self.state = ControllerState.Idle
              self.stateChanged.emit(self.state)
              self.error.emit(f"Analysis start failed: {e}")
 
 
     def cancel(self):
-        """Requests cancellation of the currently running worker task."""
+        """ Requests cancellation of the currently running worker task. """
         logger.info("AnalysisController cancel method called.")
-        self._was_cancelled = True # Set cancellation flag
-
-        if self._worker and self._worker.isRunning():
+        # Set controller's cancellation flag (useful for UI state)
+        if self.state == ControllerState.Running:
             self.state = ControllerState.Cancelling
-            logger.info(f"Calling cancel() on worker: {self._worker}")
+            self.stateChanged.emit(self.state)
+        self._was_cancelled = True
+
+        # Signal the worker thread to cancel
+        if self._worker and self._worker.isRunning():
+            logger.info(f"Calling cancel() on worker instance: {self._worker}")
             self._worker.cancel() # Call cancel on the actual worker instance
             logger.info("Worker cancel() method called.")
         else:
-            # If no worker running or instance doesn't exist, just ensure state is Idle
-            logger.info("No running worker found or worker is None, setting state to Idle.")
-            self.state = ControllerState.Idle
-
+            logger.info("Cancel called but no running worker found or worker is None.")
+            # If no worker, ensure state is Idle
+            if self.state != ControllerState.Idle:
+                 self.state = ControllerState.Idle
+                 self.stateChanged.emit(self.state)
 
     def was_cancelled(self) -> bool: # Helper method
         return self._was_cancelled
 
-    def _on_finished(self, updated_files: List[Dict[str, Any]]) -> None:
-        """Handler invoked when advanced analysis completes."""
-        logger.debug("AnalysisController entering _on_finished. Current state: %s", self.state) # ADD LOG
-        if self.state != ControllerState.Idle: # Only change state if not already Idle
+    # --- Slot connected to worker's custom finished signal (with data) ---
+    @pyqtSlot(list)
+    def _on_worker_data_finished(self, updated_files: List[Dict[str, Any]]) -> None:
+        """ Handles the data results when the worker's run method completes. """
+        logger.debug("AnalysisController received worker data finished signal.")
+        # Emit the final data onwards
+        self.analysis_data_finished.emit(updated_files)
+        logger.debug("AnalysisController analysis_data_finished signal emitted.")
+
+    # --- Slot connected to QThread's built-in finished signal ---
+    @pyqtSlot()
+    def _on_worker_thread_finished(self) -> None:
+        """ Handles cleanup when the QThread itself has finished execution. """
+        logger.debug("AnalysisController received QThread finished signal.")
+        if self.state != ControllerState.Idle: # Ensure state is Idle
             self.state = ControllerState.Idle
-            logger.debug("AnalysisController state set to Idle.") # ADD LOG
-            try:
-                self.stateChanged.emit(self.state)
-                logger.debug("AnalysisController stateChanged emitted.") # ADD LOG
-            except Exception as e:
-                 logger.error(f"Error emitting stateChanged from AnalysisController: {e}", exc_info=True) # ADD LOG
-        else:
-             logger.debug("AnalysisController already Idle in _on_finished.") # ADD LOG
+            logger.debug("AnalysisController state set to Idle by thread finish.")
+            self.stateChanged.emit(self.state) # Emit final state change
 
-        try:
-            self.finished.emit(updated_files)
-            logger.debug("AnalysisController finished signal emitted.") # ADD LOG
-        except Exception as e:
-             logger.error(f"Error emitting finished from AnalysisController: {e}", exc_info=True) # ADD LOG
+        # *** Schedule the QThread for safe deletion and clear our reference ***
+        worker = self._worker
+        if worker:
+            # This ensures Qt cleans up the underlying thread object only after
+            # the run() method has fully returned and all internal teardown is done.
+            worker.deleteLater()
+            logger.debug("AnalysisController scheduled worker.deleteLater()")
 
+        # Clear our pointer so we can start fresh next time
         self._worker = None
-        logger.debug("AnalysisController _on_finished completed.") # ADD LOG
+        logger.debug("AnalysisController worker reference cleared.")
+        logger.debug("AnalysisController _on_worker_thread_finished completed.")
