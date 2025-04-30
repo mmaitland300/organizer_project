@@ -116,9 +116,8 @@ Follow these steps to get Musicians Organizer up and running on your machine.
 ### Installation
 
 1.  **Clone the Repository**
-    (Replace the URL if your repository is hosted elsewhere)
     ```bash
-    git clone <your-repository-url> musicians_organizer
+    git clone https://github.com/mmaitland300/organizer_project musicians_organizer
     cd musicians_organizer
     ```
 
@@ -127,19 +126,19 @@ Follow these steps to get Musicians Organizer up and running on your machine.
 
     * **Windows (PowerShell):**
         ```bash
-        python -m venv venv
+        python3.11 -m venv venv
         .\venv\Scripts\Activate.ps1
         pip install -r requirements.txt
         ```
     * **Windows (Command Prompt):**
         ```bash
-        python -m venv venv
+        python3.11 -m venv venv
         .\venv\Scripts\activate.bat
         pip install -r requirements.txt
         ```
     * **macOS / Linux (Bash/Zsh):**
         ```bash
-        python3 -m venv venv
+        python3.11 -m venv venv
         source venv/bin/activate
         pip install -r requirements.txt
         ```
