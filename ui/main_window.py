@@ -36,7 +36,7 @@ from ui.dialogs.feature_view_dialog import FeatureViewDialog # Import the new di
 from ui.dialogs.duplicate_manager_dialog import DuplicateManagerDialog
 from ui.dialogs.multi_dim_tag_editor_dialog import MultiDimTagEditorDialog
 from ui.dialogs.waveform_dialog import WaveformDialog
-
+from ui.dialogs.spectrogram_dialog import SpectrogramDialog
 from ui.dialogs.waveform_player_widget import WaveformPlayerWidget
 from utils.helpers import bytes_to_unit, open_file_location
 
@@ -254,6 +254,8 @@ class MainWindow(QtWidgets.QMainWindow):
         actPreview = QtWidgets.QAction("Preview", self); actPreview.triggered.connect(self.previewSelected); self.audioToolBar.addAction(actPreview)
         self.actStopPreview = QtWidgets.QAction("Stop", self); self.actStopPreview.setObjectName("actStopPreview"); self.actStopPreview.triggered.connect(self.stopPreview); self.audioToolBar.addAction(self.actStopPreview)
         actWaveform = QtWidgets.QAction("Waveform", self); actWaveform.triggered.connect(self.waveformPreview); self.audioToolBar.addAction(actWaveform)
+        # --- ADD Spectrogram Action ---
+        actViewSpectrogram = QtWidgets.QAction("Spectrogram", self); actViewSpectrogram.setObjectName("actViewSpectrogram"); actViewSpectrogram.triggered.connect(self.viewSpectrogram); self.audioToolBar.addAction(actViewSpectrogram)
         actWaveformPlayer = QtWidgets.QAction("Waveform Player", self); actWaveformPlayer.triggered.connect(self.launchWaveformPlayer); self.audioToolBar.addAction(actWaveformPlayer)
         spacer2 = QtWidgets.QWidget(self); spacer2.setFixedWidth(15); self.audioToolBar.addWidget(spacer2)
         actAutoTag = QtWidgets.QAction("Auto Tag", self); actAutoTag.triggered.connect(self.autoTagFiles); self.audioToolBar.addAction(actAutoTag)
@@ -261,6 +263,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actAnalyzeLibrary = QtWidgets.QAction("Analyze Library", self); self.actAnalyzeLibrary.setObjectName("actAnalyzeLibrary"); self.actAnalyzeLibrary.triggered.connect(self.runAdvancedAnalysis); self.audioToolBar.addAction(self.actAnalyzeLibrary)
         self.actViewFeatures = QtWidgets.QAction("View Features", self); self.actViewFeatures.setObjectName("actViewFeatures"); self.actViewFeatures.triggered.connect(self.viewSelectedFileFeatures); self.audioToolBar.addAction(self.actViewFeatures)
         self.actRecommend = QtWidgets.QAction("Recommend", self); self.actRecommend.setObjectName("actRecommend"); self.actRecommend.triggered.connect(self.recommendSimilarSamples); self.audioToolBar.addAction(self.actRecommend)
+        # Store reference if needed for _update_ui_state
+        self.actViewSpectrogram = actViewSpectrogram # Optional: store reference
         actSendToCubase = QtWidgets.QAction("Send to Cubase", self); actSendToCubase.triggered.connect(self.sendToCubase); self.audioToolBar.addAction(actSendToCubase)
 
 
@@ -742,6 +746,26 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
+    # --- ADD Slot for View Spectrogram Action ---
+    @pyqtSlot()
+    def viewSpectrogram(self) -> None:
+        """Handles the 'View Spectrogram' action."""
+        logger.debug("View Spectrogram action triggered.")
+        path = self.getSelectedFilePath()
+
+        if not path:
+            QtWidgets.QMessageBox.information(self, "View Spectrogram", "No file selected.")
+            return
+
+        # Check if the file is likely an audio file based on extension
+        if not path.lower().endswith(tuple(AUDIO_EXTENSIONS)):
+            QtWidgets.QMessageBox.warning(self, "View Spectrogram", "Cannot show spectrogram for non-audio file.")
+            return
+
+        # Create and show the dialog
+        logger.info(f"Showing spectrogram for: {path}")
+        dialog = SpectrogramDialog(path, theme=self.theme, parent=self)
+        dialog.exec_()
 
     def is_any_task_busy(self) -> bool:
         """Checks if any background controller or stats worker is active."""
@@ -1495,7 +1519,8 @@ class MainWindow(QtWidgets.QMainWindow):
         edit_tags_action = self.findChild(QtWidgets.QAction, "actEditTags") # Adjust name if needed
         preview_action = self.findChild(QtWidgets.QAction, "actPreview") # Adjust name if needed
         send_cubase_action = self.findChild(QtWidgets.QAction, "actSendToCubase") # Adjust name if needed
-        # Add others like actWaveform, actWaveformPlayer if needed
+
+        view_spectrogram_action = getattr(self, "actViewSpectrogram", None) # Get new action
 
         # --- Set Enabled States ---
         select_folder_action.setEnabled(not is_controller_busy)
@@ -1511,6 +1536,9 @@ class MainWindow(QtWidgets.QMainWindow):
             and (not is_stats_busy)
             and is_single_selection
             )
+        
+        # Enable spectrogram view for single audio file selection when not busy
+        if view_spectrogram_action: view_spectrogram_action.setEnabled(can_operate_on_single_select)
 
         # Handle View Features tooltip update (incorporate previous fix)
         if view_features_action:
