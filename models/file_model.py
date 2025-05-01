@@ -288,7 +288,10 @@ class FileTableModel(QtCore.QAbstractTableModel):
                     new_value = int(str_val) if str_val else None
                 except ValueError:
                     return False  # Invalid input
-                if original_value != new_value: file_info["bpm"] = new_value; needs_db_save = True; data_changed = True # type: ignore[assignment]
+                if original_value != new_value:
+                    file_info["bpm"] = new_value
+                    needs_db_save = True
+                    data_changed = True  # type: ignore[assignment]
 
             elif header == "Key":
                 original_value = file_info.get("key", "")
@@ -697,7 +700,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
 
     def set_filter_bit_depth(self, bit_depth: Optional[int]) -> None:
         try:
-            val = int(bit_depth) if bit_depth not in (None, "", "Any", 0) else None # type: ignore[arg-type]
+            val = int(bit_depth) if bit_depth not in (None, "", "Any", 0) else None  # type: ignore[arg-type]
         except (TypeError, ValueError):
             val = None
         if self._filter_bit_depth != val:
@@ -884,7 +887,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         if filter_lufs_active:
             file_lufs = file_info.get("loudness_lufs")
             try:
-                file_lufs_f = float(file_lufs) # type: ignore[arg-type]
+                file_lufs_f = float(file_lufs)  # type: ignore[arg-type]
                 if (
                     self._filter_lufs_min is not None
                     and file_lufs_f < self._filter_lufs_min
@@ -908,7 +911,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
             file_bit_depth = file_info.get("bit_depth")
             try:
                 # This int() call will raise TypeError if file_bit_depth is None
-                file_bit_depth_i = int(file_bit_depth) # type: ignore[arg-type]
+                file_bit_depth_i = int(file_bit_depth)  # type: ignore[arg-type]
                 if file_bit_depth_i != self._filter_bit_depth:
                     # logger.debug(f"Filter Reject Row {source_row}: Bit depth {file_bit_depth_i} != {self._filter_bit_depth}")
                     return False
@@ -924,7 +927,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         if filter_pitch_active:
             file_pitch = file_info.get("pitch_hz")
             try:
-                file_pitch_f = float(file_pitch) # type: ignore[arg-type]
+                file_pitch_f = float(file_pitch)  # type: ignore[arg-type]
                 # Check Min Boundary
                 if (
                     self._filter_pitch_hz_min is not None
@@ -951,7 +954,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         if filter_attack_active:
             file_attack = file_info.get("attack_time")  # Value stored in seconds
             try:
-                file_attack_f = float(file_attack) # type: ignore[arg-type]
+                file_attack_f = float(file_attack)  # type: ignore[arg-type]
                 # Compare directly with filter values (also in seconds)
                 if (
                     self._filter_attack_time_min is not None

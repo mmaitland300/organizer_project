@@ -212,7 +212,9 @@ class AutoTagService:
                         tag_match.group(1) if tag_match.groups() else tag_match.group(0)
                     )
                     if tag_value:  # Check if tag_value is not None and not empty
-                        assert isinstance(tag_value, str) # Assert type *after* checking not None
+                        assert isinstance(
+                            tag_value, str
+                        )  # Assert type *after* checking not None
                         tag_value_norm = tag_value.lower().replace("-", " ")
                     # tag_value_norm = tag_value.lower().replace("-", " ") # This line seems redundant/incorrectly placed - removed
                     if tag_value_norm not in dim_tags:

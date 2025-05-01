@@ -1,4 +1,4 @@
-name: CI
+name: CI (pip)
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: [3.11]
+        python: [3.10, 3.11]
 
     steps:
       - uses: actions/checkout@v4
@@ -22,28 +22,28 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: Install Poetry
-        run: pip install poetry
-
-      - name: Install dependencies
+      - name: Create virtualenv & install deps
         run: |
-          poetry config virtualenvs.create false
-          poetry install --no-interaction --with dev
+          python -m venv .venv
+          # Linux/macOS
+          source .venv/bin/activate
+          # Windows (PowerShell):
+          #   .venv\Scripts\Activate.ps1
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
       - name: Check formatting (Black)
-        run: poetry run black --check .
-        continue-on-error: true
+        run: .venv/bin/black --check .
 
       - name: Check import sorting (isort)
-        run: poetry run isort --check-only .
+        run: .venv/bin/isort --check-only .
 
       - name: Lint (Flake8)
-        run: poetry run flake8 .
-        continue-on-error: true
+        run: .venv/bin/flake8 .
 
       - name: Type-check (Mypy)
-        run: poetry run mypy .
-        continue-on-error: true
+        run: .venv/bin/mypy .
 
       - name: Run tests
-        run: poetry run pytest -q --maxfail=1 --disable-warnings
+        run: .venv/bin/pytest -q --maxfail=1 --disable-warnings

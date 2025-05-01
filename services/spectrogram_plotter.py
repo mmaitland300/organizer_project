@@ -86,7 +86,7 @@ class SpectrogramPlotter:
 
             # Set color for axes borders (spines)
             for spine in ax.spines.values():
-                spine.set_edgecolor(grid_color) # type: ignore[attr-defined]
+                spine.set_edgecolor(grid_color)  # type: ignore[attr-defined]
 
             # Set color for ticks and tick labels
             ax.tick_params(axis="x", colors=text_color, labelcolor=text_color)
