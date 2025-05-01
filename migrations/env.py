@@ -1,12 +1,11 @@
 # migrations/env.py
+import logging
 import os
 import sys
-import logging
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # --- Project Setup ---
 # Add project root to sys.path to allow importing project modules

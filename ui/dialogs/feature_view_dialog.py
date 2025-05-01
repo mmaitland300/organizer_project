@@ -3,8 +3,8 @@
 Dialog for displaying detailed audio features of a selected file in a specific order.
 """
 
-import os
 import logging
+import os
 from typing import Any, Dict, List  # Add List import
 
 from PyQt5 import QtCore, QtWidgets
@@ -12,14 +12,12 @@ from PyQt5 import QtCore, QtWidgets
 # --- Import necessary constants from settings ---
 # Includes categorized keys for ordering and display names
 try:
-    from config.settings import (
-        FEATURE_DISPLAY_NAMES,
-        # Keys needed for ordering:
+    from config.settings import ADDITIONAL_FEATURE_KEYS  # The new features
+    from config.settings import (  # Keys needed for ordering:; ALL_FEATURE_KEYS # Not strictly needed if using categorized lists
         CORE_FEATURE_KEYS,
-        ADDITIONAL_FEATURE_KEYS,  # The new features
-        SPECTRAL_FEATURE_KEYS,
+        FEATURE_DISPLAY_NAMES,
         MFCC_FEATURE_KEYS,
-        # ALL_FEATURE_KEYS # Not strictly needed if using categorized lists
+        SPECTRAL_FEATURE_KEYS,
     )
 except ImportError:
     # Fallback or raise error if settings cannot be imported

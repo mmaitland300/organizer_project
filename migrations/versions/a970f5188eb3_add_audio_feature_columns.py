@@ -5,13 +5,13 @@ Revises: a39924643879
 Create Date: 2025-04-20 17:14:28.703553
 """
 
-from typing import Union, Sequence
-from alembic import op
+from typing import Sequence, Union
+
 import sqlalchemy as sa
+from alembic import op
 
 # Pull in *exactly* the list your app uses everywhere else:
 from config.settings import ALL_FEATURE_KEYS
-
 
 # revision identifiers, used by Alembic.
 revision: str = "a970f5188eb3"

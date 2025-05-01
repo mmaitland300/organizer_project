@@ -12,6 +12,7 @@ import re
 import subprocess
 import time
 from typing import Any, Dict, List, Optional, Union
+
 from PyQt5 import QtWidgets
 
 

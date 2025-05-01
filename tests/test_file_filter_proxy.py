@@ -1,7 +1,9 @@
 # tests/test_file_filter_proxy.py
 import pytest
-from models.file_model import FileTableModel, FileFilterProxyModel
 from PyQt5.QtCore import Qt
+
+from models.file_model import FileFilterProxyModel, FileTableModel
+from services.database_manager import DatabaseManager
 
 
 @pytest.fixture
@@ -36,8 +38,13 @@ def sample_files():
 
 
 @pytest.fixture
-def proxy_model(sample_files):
-    table = FileTableModel(sample_files)
+def proxy_model(
+    sample_files, db_manager: DatabaseManager
+):  # <<< ADD db_manager fixture injection
+    # Pass db_manager correctly using keyword arguments for clarity
+    table = FileTableModel(
+        db_manager=db_manager, files=sample_files, size_unit="KB"
+    )  # <<< CORRECTED CALL
     proxy = FileFilterProxyModel()
     proxy.setSourceModel(table)
     return proxy
@@ -81,7 +88,7 @@ def test_bit_depth_filter(proxy_model, sample_files, bit_depth, expected_ids):
 @pytest.mark.parametrize(
     "min_pitch,max_pitch,expected_ids",
     [
-        (400.0, None, [1]),
+        (400.0, None, [1, 2]),  # Files with 440Hz and 880Hz are both >= 400Hz
         (None, 600.0, [1]),
         (400.0, 900.0, [1, 2]),
         (None, None, [1, 2, 3]),

@@ -6,18 +6,18 @@ import os
 from typing import Optional
 
 # --- PyQt5 Imports ---
-from PyQt5 import QtWidgets, QtCore
+from PyQt5 import QtCore, QtWidgets
 
 # --- Matplotlib Imports ---
 try:
     import matplotlib
 
     matplotlib.use("Qt5Agg")
-    from matplotlib.figure import Figure
     from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     from matplotlib.backends.backend_qt5agg import (
         NavigationToolbar2QT as NavigationToolbar,
     )
+    from matplotlib.figure import Figure
 
     MATPLOTLIB_AVAILABLE = True
 except ImportError:

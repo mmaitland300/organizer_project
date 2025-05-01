@@ -6,22 +6,22 @@ Leverages SpectrogramService for efficient spectrogram calculation and caching.
 """
 
 import logging
-import sys
-
-# print(f"--- analysis_engine.py --- sys.path: {sys.path}") # Optional debug print
-
 import math
 import os
 import re
+import sys
 from multiprocessing.synchronize import Event as MPEvent  # Precise type hint
-from typing import Any, Dict, Optional, Union, List
+from typing import Any, Dict, List, Optional, Union
 
 # --- Application Imports ---
 from services.spectrogram_service import SpectrogramService
 
+# print(f"--- analysis_engine.py --- sys.path: {sys.path}") # Optional debug print
+
+
 # Import Constants from settings
 try:
-    from config.settings import N_MFCC, ALL_FEATURE_KEYS, ADDITIONAL_FEATURE_KEYS
+    from config.settings import ADDITIONAL_FEATURE_KEYS, ALL_FEATURE_KEYS, N_MFCC
 
     # Combine all expected feature keys for initialization
     ALL_EXPECTED_KEYS = list(set(["bpm"] + ALL_FEATURE_KEYS + ADDITIONAL_FEATURE_KEYS))
@@ -44,7 +44,7 @@ try:
 
     NUMPY_AVAILABLE = True
 except ImportError:
-    np = None
+    np = None  # type: ignore[assignment]
     NUMPY_AVAILABLE = False
 
 try:
@@ -55,10 +55,10 @@ try:
 
         LIBROSA_AVAILABLE = True
     else:
-        librosa = None
+        librosa = None  # type: ignore[assignment]
         LIBROSA_AVAILABLE = False
 except ImportError:
-    librosa = None
+    librosa = None  # type: ignore[assignment]
     LIBROSA_AVAILABLE = False
 
 try:
@@ -66,7 +66,7 @@ try:
 
     SOUNDFILE_AVAILABLE = True
 except ImportError:
-    sf = None
+    sf = None  # type: ignore[assignment]
     SOUNDFILE_AVAILABLE = False
 
 try:
@@ -74,7 +74,7 @@ try:
 
     PYLOUDNORM_AVAILABLE = True
 except ImportError:
-    pyln = None
+    pyln = None  # type: ignore[assignment]
     PYLOUDNORM_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -387,8 +387,8 @@ class AnalysisEngine:
                 # fmin/fmax help focus the search range
                 f0, voiced_flag, voiced_probs = librosa.pyin(
                     y,
-                    fmin=librosa.note_to_hz("C2"),
-                    fmax=librosa.note_to_hz("C7"),
+                    fmin=float(librosa.note_to_hz("C2")),
+                    fmax=float(librosa.note_to_hz("C7")),
                     sr=sr,
                 )
                 # Check event again after pyin

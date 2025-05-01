@@ -3,27 +3,27 @@
 Singleton-style class to manage the application's SQLite database, with batch-write support.
 Handles new audio feature columns.
 """
-import os
-
-import logging
-import threading
-import json
 import datetime
+import json
+import logging
 import math
+import os
+import threading
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import numpy as np
-from typing import Dict, Any, List, Optional, Tuple, Union
 
 # ---> Add SQLAlchemy imports <---
-from sqlalchemy import create_engine, select, insert, delete, text
-from sqlalchemy.engine import Engine  # For type hinting
-
-# Import your table definition
-from services.schema import files_table
+from sqlalchemy import create_engine, delete, insert, select, text
 
 # Import specific dialect construct for ON CONFLICT
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Engine, Row  # For type hinting
 
 from config.settings import ALL_FEATURE_KEYS  # Import the list of features
+
+# Import your table definition
+from services.schema import files_table
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +280,7 @@ class DatabaseManager:
             logger.warning(f"Could not get column names from CursorResult: {e}")
             return []
 
-    def _row_to_dict(self, row: tuple, column_names: List[str]) -> Dict[str, Any]:
+    def _row_to_dict(self, row: Row[Any], column_names: List[str]) -> Dict[str, Any]:
         """
         Convert a DB row tuple to a dictionary matching file_info structure,
         including new feature columns. Uses column names for robustness.
@@ -869,12 +869,12 @@ class DatabaseManager:
                 """
 
                 # 3. Execute using SQLAlchemy connection
-                similar_rows = []
+                similar_rows: List[Row[Any]] = []  # <<< Ensure Annotation exists
                 sim_col_names = []
                 with self.engine.connect() as connection:
                     cursor_result = connection.execute(text(sim_sql_str), params)
                     sim_col_names = self._get_column_names(cursor_result)
-                    similar_rows = cursor_result.fetchall()
+                    similar_rows = cursor_result.fetchall()  # type: ignore[assignment] # Add ignore if needed
 
                 # 4. Format Results
                 similar_files = []
@@ -1061,7 +1061,7 @@ class DatabaseManager:
                 )
 
         # 6. Sort Results and Return Top N (No change needed here)
-        results_with_distance.sort(key=lambda x: x["distance"])
+        results_with_distance.sort(key=lambda x: x["distance"])  # type: ignore[arg-type, return-value]
         logger.info(
             f"Found {len(results_with_distance)} similar files. Returning top {num_results}."
         )

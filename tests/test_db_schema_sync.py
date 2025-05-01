@@ -1,7 +1,8 @@
 # tests/test_db_schema_sync.py
 
 import pytest  # Import pytest
-from sqlalchemy import text, Engine  # Import Engine for type hint
+from sqlalchemy import Engine, text  # Import Engine for type hint
+
 from config.settings import ALL_SAVABLE_COLUMNS
 
 # Import the test_engine fixture if you need it directly,

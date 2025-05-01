@@ -1,8 +1,7 @@
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "60ec2f724e78"
@@ -24,7 +23,7 @@ def upgrade() -> None:
             existing_type=sa.INTEGER(),
             type_=sa.Boolean(),  # Change type
             existing_nullable=True,
-            existing_server_default=sa.text("'0'"),
+            existing_server_default=sa.text("'0'"),  # type: ignore[arg-type]
         )
 
         # Alter feature column types from REAL to Float (if needed by schema def)
@@ -174,7 +173,7 @@ def downgrade() -> None:
                 existing_type=sa.Boolean(),
                 type_=sa.INTEGER(),  # Revert type
                 existing_nullable=True,
-                existing_server_default=sa.text("'0'"),
+                existing_server_default=sa.text("'0'"),  # type: ignore[arg-type]
             )
         except Exception as e:
             print(f"  ! Warning reverting column used: {e}")

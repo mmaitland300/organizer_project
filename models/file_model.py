@@ -8,26 +8,29 @@ This module defines:
   and advanced text search.
 """
 
-import logging
-import os
 import datetime
+import logging
 import math
+import os
 import re  # <<< Added for regex parsing
-from typing import Any, Dict, List, Optional, Union
+from typing import (  # Use for type hinting only if needed to avoid circular imports at runtime
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+)
 
 from PyQt5 import QtCore
 
 # ADD DatabaseManager type hint import
 from services.database_manager import DatabaseManager
-from typing import (
-    TYPE_CHECKING,
-)  # Use for type hinting only if needed to avoid circular imports at runtime
 
 if TYPE_CHECKING:
     from services.database_manager import DatabaseManager
 # Import helpers and settings constants
 from utils.helpers import format_duration, format_multi_dim_tags, parse_multi_dim_tags
-
 
 logger = logging.getLogger(__name__)
 
@@ -54,20 +57,18 @@ class FileTableModel(QtCore.QAbstractTableModel):
         "Tags",
     ]
 
-    # MODIFY __init__
     def __init__(
         self,
-        files: Optional[List[Dict[str, Any]]] = None,
-        size_unit: str = "KB",
-        db_manager: "DatabaseManager" = None,  # <<< Accept db_manager
-        parent: Optional[QtCore.QObject] = None,
+        db_manager: "DatabaseManager",  # REQUIRED, comes FIRST
+        files: Optional[List[Dict[str, Any]]] = None,  # Optional
+        size_unit: str = "KB",  # Optional
+        parent: Optional[QtCore.QObject] = None,  # Optional
     ) -> None:
         super().__init__(parent)
+        # Ensure internal assignment uses the correctly named argument
         self._files = files if files is not None else []
         self.size_unit = size_unit
-        if db_manager is None:  # Basic check, ideally raise error or handle properly
-            logger.error("FileTableModel initialized without a DatabaseManager!")
-        self._db_manager = db_manager  # <<< Store db_manager
+        self._db_manager = db_manager  # Make sure this uses the correct argument name
 
         # Use the statically defined headers
         self._column_count = len(self.COLUMN_HEADERS)
@@ -287,10 +288,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
                     new_value = int(str_val) if str_val else None
                 except ValueError:
                     return False  # Invalid input
-                if original_value != new_value:
-                    file_info["bpm"] = new_value
-                    needs_db_save = True
-                    data_changed = True
+                if original_value != new_value: file_info["bpm"] = new_value; needs_db_save = True; data_changed = True # type: ignore[assignment]
 
             elif header == "Key":
                 original_value = file_info.get("key", "")
@@ -298,7 +296,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
                 if original_value != new_value:
                     file_info["key"] = new_value
                     needs_db_save = True
-                    data_changed = True
+                    data_changed = True  # type: ignore[assignment]
 
             elif header == "Tags":
                 original_value = file_info.get("tags", {})
@@ -307,7 +305,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
                     if original_value != new_value:
                         file_info["tags"] = new_value
                         needs_db_save = True
-                        data_changed = True
+                        data_changed = True  # type: ignore[assignment]
                 except Exception:
                     return False  # Failed to parse
 
@@ -699,7 +697,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
 
     def set_filter_bit_depth(self, bit_depth: Optional[int]) -> None:
         try:
-            val = int(bit_depth) if bit_depth not in (None, "", "Any", 0) else None
+            val = int(bit_depth) if bit_depth not in (None, "", "Any", 0) else None # type: ignore[arg-type]
         except (TypeError, ValueError):
             val = None
         if self._filter_bit_depth != val:
@@ -781,156 +779,223 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
     ) -> bool:
         """
         Applies ALL active filters to determine if a row should be shown.
-        Includes evaluation of the advanced text search query.
+        Includes evaluation of the advanced text search query and new features.
         """
         model = self.sourceModel()
+        # Ensure the source model is the correct type
         if not isinstance(model, FileTableModel):
+            # If source model isn't set or is wrong type, accept row by default? Or reject?
+            # Accepting seems safer, but depends on desired behavior if model is invalid.
+            logger.warning("FilterProxyModel source model not set or incorrect type.")
             return True
+
+        # Get the underlying data for the row
         file_info = model.getFileAt(source_row)
         if not file_info or not isinstance(file_info, dict):
+            logger.debug(f"Filter Reject Row {source_row}: Invalid file_info data.")
+            return False  # Reject if data is invalid
+
+        # --- Apply Standard Filters (Excluding simple name filter which is replaced by advanced) ---
+
+        # 1. Unused Filter
+        if self._filter_unused_only and file_info.get("used", False):
+            # logger.debug(f"Filter Reject Row {source_row}: Used filter active and file is used.")
             return False
 
-        # --- Apply Standard Filters (Excluding simple name filter) ---
-        if self._filter_unused_only and file_info.get("used", False):
-            return False
+        # 2. Key Filter (Dedicated Combobox)
         if self._filter_key is not None:
             file_key = file_info.get("key", "").strip().upper()
+            # Reject if key doesn't match (case insensitive handled by storing filter key as upper)
             if file_key != self._filter_key:
+                # logger.debug(f"Filter Reject Row {source_row}: Key mismatch ('{file_key}' vs '{self._filter_key}')")
                 return False
-        if self._filter_bpm_min is not None or self._filter_bpm_max is not None:
+
+        # 3. BPM Filter
+        filter_bpm_active = (
+            self._filter_bpm_min is not None or self._filter_bpm_max is not None
+        )
+        if filter_bpm_active:
             file_bpm = file_info.get("bpm")
             if file_bpm is None:
-                return False
+                # logger.debug(f"Filter Reject Row {source_row}: BPM filter active but file has no BPM.")
+                return False  # Reject if filtering on BPM but file has no BPM
             try:
                 file_bpm_f = float(file_bpm)
+                if (
+                    self._filter_bpm_min is not None
+                    and file_bpm_f < self._filter_bpm_min
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: BPM {file_bpm_f} < {self._filter_bpm_min} (Min)")
+                    return False
+                if (
+                    self._filter_bpm_max is not None
+                    and file_bpm_f > self._filter_bpm_max
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: BPM {file_bpm_f} > {self._filter_bpm_max} (Max)")
+                    return False
             except (ValueError, TypeError):
-                return False
-            if self._filter_bpm_min is not None and file_bpm_f < self._filter_bpm_min:
-                return False
-            if self._filter_bpm_max is not None and file_bpm_f > self._filter_bpm_max:
-                return False
+                # logger.debug(f"Filter Reject Row {source_row}: Cannot convert file BPM '{file_bpm}' to float.")
+                return False  # Reject if conversion fails when filtering
+
+        # 4. Specific Tags Filter (Dictionary - currently unused by UI but logic kept)
         if self._filter_tags_dict:
             file_tags = file_info.get("tags", {})
             if not isinstance(file_tags, dict):
-                return False
+                # logger.debug(f"Filter Reject Row {source_row}: Specific tag filter active but file tags not a dict.")
+                return False  # Cannot check tags if not a dict
             for req_dim, req_values_list in self._filter_tags_dict.items():
                 file_dim_values_list = file_tags.get(req_dim.lower(), [])
+                # Ensure comparison works even if file tags aren't strings
                 file_dim_values_upper_set = {
-                    str(tag).upper() for tag in file_dim_values_list
+                    str(tag).upper().strip() for tag in file_dim_values_list if tag
                 }
+                # Check if all required tag values for this dimension are present in the file's tags
                 if not all(
                     req_val in file_dim_values_upper_set for req_val in req_values_list
                 ):
+                    # logger.debug(f"Filter Reject Row {source_row}: Missing required tag dimension/value '{req_dim}':'{req_values_list}'")
                     return False
+
+        # 5. Simple Tag Text Filter (QLineEdit)
         if self._filter_tag_text is not None:
             file_tags = file_info.get("tags", {})
             if not isinstance(file_tags, dict):
-                return False
+                # logger.debug(f"Filter Reject Row {source_row}: Tag text filter active but file tags not a dict.")
+                return False  # Cannot check tags if not a dict
             found_match = False
-            search_text = self._filter_tag_text
+            search_text = self._filter_tag_text  # Already upper case from setter
             for dim_values_list in file_tags.values():
-                if any(
+                # Check if search text is substring of any tag value in any dimension
+                if isinstance(dim_values_list, list) and any(
                     search_text in str(tag_val).upper() for tag_val in dim_values_list
                 ):
                     found_match = True
                     break
             if not found_match:
+                # logger.debug(f"Filter Reject Row {source_row}: Tag text '{search_text}' not found in tags.")
                 return False
 
-        # --- Apply NEW Feature Filters (Unchanged) ---
-        if self._filter_lufs_min is not None or self._filter_lufs_max is not None:
+        # --- Apply NEW Feature Filters ---
+
+        # 6. LUFS Filter
+        filter_lufs_active = (
+            self._filter_lufs_min is not None or self._filter_lufs_max is not None
+        )
+        if filter_lufs_active:
             file_lufs = file_info.get("loudness_lufs")
-            if file_lufs is None:
-                return False
             try:
-                file_lufs_f = float(file_lufs)
+                file_lufs_f = float(file_lufs) # type: ignore[arg-type]
+                if (
+                    self._filter_lufs_min is not None
+                    and file_lufs_f < self._filter_lufs_min
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: LUFS {file_lufs_f} < {self._filter_lufs_min} (Min)")
+                    return False
+                if (
+                    self._filter_lufs_max is not None
+                    and file_lufs_f > self._filter_lufs_max
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: LUFS {file_lufs_f} > {self._filter_lufs_max} (Max)")
+                    return False
             except (ValueError, TypeError):
-                return False
-            if (
-                self._filter_lufs_min is not None
-                and file_lufs_f < self._filter_lufs_min
-            ):
-                return False
-            if (
-                self._filter_lufs_max is not None
-                and file_lufs_f > self._filter_lufs_max
-            ):
-                return False
-        if self._filter_bit_depth is not None:
+                # This now catches errors from float(None) or non-numeric values.
+                # logger.debug(f"Filter Reject Row {source_row}: Invalid/missing LUFS value for active filter.")
+                return False  # Reject if filter active and value is None or non-numeric
+
+        # 7. Bit Depth Filter
+        filter_bit_depth_active = self._filter_bit_depth is not None
+        if filter_bit_depth_active:
             file_bit_depth = file_info.get("bit_depth")
-            if file_bit_depth is None:
-                return False
             try:
-                file_bit_depth_i = int(file_bit_depth)
+                # This int() call will raise TypeError if file_bit_depth is None
+                file_bit_depth_i = int(file_bit_depth) # type: ignore[arg-type]
+                if file_bit_depth_i != self._filter_bit_depth:
+                    # logger.debug(f"Filter Reject Row {source_row}: Bit depth {file_bit_depth_i} != {self._filter_bit_depth}")
+                    return False
             except (ValueError, TypeError):
+                # logger.debug(f"Filter Reject Row {source_row}: Invalid/missing Bit Depth value for active filter.")
                 return False
-            if file_bit_depth_i != self._filter_bit_depth:
-                return False
-        if (
+
+        # 8. Pitch Hz Filter
+        filter_pitch_active = (
             self._filter_pitch_hz_min is not None
             or self._filter_pitch_hz_max is not None
-        ):
+        )
+        if filter_pitch_active:
             file_pitch = file_info.get("pitch_hz")
-            if file_pitch is None:
-                return False
             try:
-                file_pitch_f = float(file_pitch)
+                file_pitch_f = float(file_pitch) # type: ignore[arg-type]
+                # Check Min Boundary
+                if (
+                    self._filter_pitch_hz_min is not None
+                    and file_pitch_f < self._filter_pitch_hz_min
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: Pitch {file_pitch_f} < {self._filter_pitch_hz_min} (Min)")
+                    return False
+                # Check Max Boundary
+                if (
+                    self._filter_pitch_hz_max is not None
+                    and file_pitch_f > self._filter_pitch_hz_max
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: Pitch {file_pitch_f} > {self._filter_pitch_hz_max} (Max)")
+                    return False
             except (ValueError, TypeError):
+                # logger.debug(f"Filter Reject Row {source_row}: Invalid/missing Pitch value for active filter.")
                 return False
-            min_bound = self._filter_pitch_hz_min
-            max_bound = self._filter_pitch_hz_max
-            if (min_bound is not None) and (max_bound is None):
-                max_bound = min_bound * 1.5
-            elif (max_bound is not None) and (min_bound is None):
-                min_bound = max_bound / 1.5
-            if (min_bound is not None) and (file_pitch_f < min_bound):
-                return False
-            if (max_bound is not None) and (file_pitch_f > max_bound):
-                return False
-        if (
+
+        # 9. Attack Time Filter
+        filter_attack_active = (
             self._filter_attack_time_min is not None
             or self._filter_attack_time_max is not None
-        ):
-            file_attack = file_info.get("attack_time")
-            if file_attack is None:
-                return False
+        )
+        if filter_attack_active:
+            file_attack = file_info.get("attack_time")  # Value stored in seconds
             try:
-                file_attack_f = float(file_attack)
+                file_attack_f = float(file_attack) # type: ignore[arg-type]
+                # Compare directly with filter values (also in seconds)
+                if (
+                    self._filter_attack_time_min is not None
+                    and file_attack_f < self._filter_attack_time_min
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: Attack {file_attack_f}s < {self._filter_attack_time_min}s (Min)")
+                    return False
+                if (
+                    self._filter_attack_time_max is not None
+                    and file_attack_f > self._filter_attack_time_max
+                ):
+                    # logger.debug(f"Filter Reject Row {source_row}: Attack {file_attack_f}s > {self._filter_attack_time_max}s (Max)")
+                    return False
             except (ValueError, TypeError):
-                return False
-            if (
-                self._filter_attack_time_min is not None
-                and file_attack_f < self._filter_attack_time_min
-            ):
-                return False
-            if (
-                self._filter_attack_time_max is not None
-                and file_attack_f > self._filter_attack_time_max
-            ):
+                # logger.debug(f"Filter Reject Row {source_row}: Cannot convert file attack time '{file_attack}' to float.")
                 return False
 
-        # --- Evaluate Advanced Search Query (NEW LOGIC) ---
+        # --- Evaluate Advanced Search Query (Boolean/Fielded Text Search) ---
         if self._advanced_query_structure:
-            overall_match = True  # Default for first condition or empty structure
+            overall_match = True  # Default assumption for first term's context
+            # logger.debug(f"Filter Row {source_row} evaluating advanced query: {self._advanced_query_structure}")
             for i, condition in enumerate(self._advanced_query_structure):
+                # Evaluate the current condition against the file info
                 condition_match = self._check_condition(condition, file_info)
-                op = condition["op"]  # Operator linking previous result to this one
+                op = condition["op"]  # Operator linking *previous* result to this one
 
-                if i == 0:  # First condition sets the initial state
+                if i == 0:
+                    # First condition sets the initial state
                     overall_match = condition_match
                 elif op == "AND":
+                    # Must match previous AND current
                     overall_match = overall_match and condition_match
+                    # Optimization: If an AND fails, the whole query fails
+                    if not overall_match:
+                        break
                 elif op == "OR":
+                    # Must match previous OR current
                     overall_match = overall_match or condition_match
-
-                # Optimization: If overall_match becomes False with AND, can stop early.
-                # If overall_match becomes True with OR, could potentially stop if ORs are grouped?
-                # For simplicity now, evaluate all conditions.
-                # if not overall_match and op == 'AND': break # Optional optimization
-
-            # If after evaluating all conditions, the result is False, exclude row
+                    # Optimization: If an OR succeeds, can we stop? Only if ORs are grouped and correctly parsed, safer to evaluate all for now.
+            # logger.debug(f"Filter Row {source_row} advanced query result: {overall_match}")
+            # If after evaluating all conditions, the combined result is False, exclude row
             if not overall_match:
                 return False
 
         # --- If all applicable filters passed ---
+        # logger.debug(f"Filter Accept Row {source_row}")
         return True  # Include the row

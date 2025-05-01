@@ -8,7 +8,8 @@ import logging
 import os
 import re
 import warnings
-from typing import Optional, Any, List, Dict, Tuple, Pattern
+from typing import Any, Dict, List, Optional, Pattern, Tuple
+
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 
@@ -131,8 +132,8 @@ try:
 
     matplotlib.use("Qt5Agg")
     import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
     import numpy as np
+    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 except ImportError:
     plt = None
     FigureCanvas = None

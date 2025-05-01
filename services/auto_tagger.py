@@ -10,15 +10,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Import necessary components from settings
 try:
+    from config.settings import BPM_REGEX  # <<< Import the new BPM_REGEX
     from config.settings import (
+        _FOLDER_IGNORE_RE,
         ENABLE_FILENAME_TAGGING,
         ENABLE_FOLDER_TAGGING,
         FILENAME_TAG_PATTERNS,
         FOLDER_DIMENSION_MAP,
         FOLDER_STRUCTURE_DEPTH,
         KEY_REGEX,
-        BPM_REGEX,  # <<< Import the new BPM_REGEX
-        _FOLDER_IGNORE_RE,
     )
 
     # from services.analysis_engine import AnalysisEngine # Keep commented if not used
@@ -30,8 +30,8 @@ except ImportError:
     FILENAME_TAG_PATTERNS = []
     FOLDER_DIMENSION_MAP = {}
     FOLDER_STRUCTURE_DEPTH = 0
-    KEY_REGEX = None
-    BPM_REGEX = None  # <<< Add fallback
+    KEY_REGEX = None  # type: ignore[assignment]
+    BPM_REGEX = None  # type: ignore[assignment]
     _FOLDER_IGNORE_RE = re.compile(r"^$")
 
 from utils.helpers import detect_key_from_filename
@@ -211,7 +211,10 @@ class AutoTagService:
                     tag_value = (
                         tag_match.group(1) if tag_match.groups() else tag_match.group(0)
                     )
-                    tag_value_norm = tag_value.lower().replace("-", " ")
+                    if tag_value:  # Check if tag_value is not None and not empty
+                        assert isinstance(tag_value, str) # Assert type *after* checking not None
+                        tag_value_norm = tag_value.lower().replace("-", " ")
+                    # tag_value_norm = tag_value.lower().replace("-", " ") # This line seems redundant/incorrectly placed - removed
                     if tag_value_norm not in dim_tags:
                         logger.debug(
                             f"Adding filename tag '{tag_value_norm}' to dimension '{dimension}' for: {filename}"

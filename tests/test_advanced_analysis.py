@@ -1,26 +1,26 @@
 # tests/test_advanced_analysis.py
 
+import copy
+import logging
 import sys
 import time
-from typing import Dict, Optional
-import pytest
-import logging
-
-# Added Future import, removed ANY as it's less needed now
-from unittest.mock import patch, MagicMock, call
-import copy
 
 # Import Future for mocking submit return value
 from concurrent.futures import Future
+from typing import Any, Dict, List, Optional
 
+# Added Future import, removed ANY as it's less needed now
+from unittest.mock import MagicMock, call, patch
+
+import pytest
+from PyQt5.QtCore import QEventLoop, QTimer
 from PyQt5.QtTest import QSignalSpy
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QTimer, QEventLoop
 
-from services.advanced_analysis_worker import (
+from services.advanced_analysis_worker import (  # Import the real worker function for type checking if needed
     AdvancedAnalysisWorker,
     _analyze_file_process_worker,
-)  # Import the real worker function for type checking if needed
+)
 from services.database_manager import DatabaseManager
 
 app = QApplication.instance() or QApplication(sys.argv)
@@ -61,46 +61,6 @@ def mock_analyze_process_worker_side_effect(
         return None
 
 
-# --- Mock function for the *worker process* function ---
-# This function needs to simulate the return value of _analyze_file_process_worker
-def mock_analyze_process_worker_side_effect(
-    file_info: Dict, cancel_event: MagicMock
-) -> Optional[Dict]:
-    """
-    Mocks the return value of _analyze_file_process_worker based on path.
-    Returns the *updated* file_info dict or None.
-    """
-    path = file_info.get("path")
-    logger.debug(f"Mock analyzing (process worker): {path}")
-    time.sleep(0.05)  # Simulate some work
-
-    # Make a copy to modify and return, simulating the real worker
-    updated_info = copy.deepcopy(file_info)
-
-    if path == "/dummy/audio1.wav":
-        updated_info.update(
-            {"brightness": 1000.0, "loudness_rms": 0.5, "pitch_hz": 440.0}
-        )
-        return updated_info
-    elif path == "/dummy/audio2.flac":
-        updated_info.update(
-            {"brightness": 2000.0, "loudness_rms": 0.7, "pitch_hz": 880.0}
-        )
-        return updated_info
-    elif path == "/dummy/audio_error.mp3":
-        # Simulate analysis failure by returning None (as the real worker does on exception)
-        return None
-    elif path == "/dummy/audio_no_features.aiff":
-        # Simulate analysis returning no new features (real worker returns None in this case)
-        return None
-    elif path == "/dummy/non_audio.txt":
-        # Simulate non-audio file (real worker returns None)
-        return None
-    else:
-        # Default case: return None if no match (simulates other errors or skipped files)
-        return None
-
-
 # --- Pytest Test Functions ---
 
 # --- Test Function (MODIFIED Patch Target) ---
@@ -128,7 +88,7 @@ def test_parallel_analysis_and_db_save(
         mock_cancel_event = MagicMock()
         logger.debug(f"Mock aliased submit called for: {file_info.get('path')}")
         result = mock_analyze_process_worker_side_effect(file_info, mock_cancel_event)
-        mock_future = Future()
+        mock_future: Future = Future()  # <<< Added type hint
         mock_future.set_result(result)
         submitted_futures.append(mock_future)
         return mock_future
@@ -138,7 +98,7 @@ def test_parallel_analysis_and_db_save(
     # ----------------------------------------------------
 
     # Keep file list setup
-    files = [
+    files: List[Dict[str, Any]] = [
         {
             "path": "/dummy/audio1.wav",
             "tags": {"filetype": [".wav"]},
@@ -262,7 +222,7 @@ def test_cancellation(mock_submit, mock_save_records, db_manager: DatabaseManage
         logger.debug(f"Mock submit called (cancel test): {file_info.get('path')}")
         # Simulate analysis result (doesn't really matter as worker should cancel)
         result = None  # Or copy(file_info)
-        mock_future = Future()
+        mock_future: Future = Future()  # <<< Added type hint
         mock_future.set_result(result)
         # Don't sleep here, let the main worker loop handle timing/cancellation
         return mock_future
@@ -270,7 +230,7 @@ def test_cancellation(mock_submit, mock_save_records, db_manager: DatabaseManage
     mock_submit.side_effect = cancel_mock_submit_side_effect
     # -------------------------------------------------------------
 
-    files = [
+    files: List[Dict[str, Any]] = [
         {
             "path": "/dummy/cancel1.wav",
             "tags": {"filetype": [".wav"]},

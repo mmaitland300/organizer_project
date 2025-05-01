@@ -2,26 +2,27 @@
 """
 Pytest tests for the DatabaseManager service using fixtures.
 """
-import os
 import datetime
 import logging
+import os
+
 import pytest  # Import pytest
 
 # --- Alembic Check ---
 try:
     # Imports needed just for the skipif condition
-    from alembic.config import Config
     from alembic import command
+    from alembic.config import Config
 
     ALEMBIC_AVAILABLE = True
 except ImportError:
     ALEMBIC_AVAILABLE = False
 
-# Import the class we are testing
-from services.database_manager import DatabaseManager
-
 # Import needed for type hints if used within tests
 from sqlalchemy.engine import Engine
+
+# Import the class we are testing
+from services.database_manager import DatabaseManager
 
 # Skip all tests in this module if Alembic isn't installed
 pytestmark = pytest.mark.skipif(

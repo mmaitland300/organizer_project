@@ -85,7 +85,6 @@ class FileScannerService(QtCore.QThread):
             self.cache_manager = CacheManager()
         except Exception as e:
             logger.error(f"Failed to initialize CacheManager: {e}", exc_info=True)
-            self.cache_manager = None
 
     # --- Core Logic ---
     def run(self) -> None:

@@ -1,25 +1,26 @@
 # FILE: services/schema.py
+import logging  # Add logging
 import os
+
 from sqlalchemy import (
+    TIMESTAMP,
+    Boolean,
+    Column,
+    Float,
+    Index,
+    Integer,
     MetaData,
     Table,
-    Column,
-    Integer,
-    Float,
     Text,
-    Boolean,
-    TIMESTAMP,
-    Index,
     UniqueConstraint,
 )
 from sqlalchemy.sql import func  # For server_default=func.now()
-import logging  # Add logging
 
 logger = logging.getLogger(__name__)
 
 # Import constants directly from settings to ensure sync
 try:
-    from config.settings import ALL_FEATURE_KEYS, ADDITIONAL_FEATURE_KEYS
+    from config.settings import ADDITIONAL_FEATURE_KEYS, ALL_FEATURE_KEYS
 except ImportError:
     logger.error(
         "Could not import feature keys from settings. Using fallback list.",

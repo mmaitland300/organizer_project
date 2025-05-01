@@ -1,15 +1,15 @@
 # tests/test_controller.py
+from unittest.mock import MagicMock, call, patch  # Keep necessary imports
+
 import pytest
-from unittest.mock import MagicMock, patch, call  # Keep necessary imports
-
 from PyQt5.QtCore import QObject, pyqtSignal  # Keep imports if needed elsewhere
-
-# Assume imports for AnalysisController, ControllerState exist
-from ui.controllers import AnalysisController, ControllerState
 
 # We no longer need to import AdvancedAnalysisWorker itself when only patching
 # from services.advanced_analysis_worker import AdvancedAnalysisWorker
 from services.database_manager import DatabaseManager
+
+# Assume imports for AnalysisController, ControllerState exist
+from ui.controllers import AnalysisController, ControllerState
 
 
 # --- Mock Fixture for DB Manager (Keep as is) ---

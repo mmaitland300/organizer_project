@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from PyQt5.QtTest import QSignalSpy
 from PyQt5.QtWidgets import QApplication
 
+from services.database_manager import DatabaseManager
 from services.file_scanner import FileScannerService
 
 # Ensure a QApplication instance is available.
@@ -23,8 +24,13 @@ class TestFileScannerService(unittest.TestCase):
         # Write some dummy data (it need not be valid audio)
         with open(self.test_file_path, "wb") as f:
             f.write(b"\x00" * 1024)  # 1KB dummy file.
-        # Create the scanner. Disable BPM detection to avoid invoking librosa.
-        self.scanner = FileScannerService(self.temp_dir.name, bpm_detection=False)
+
+            # Mock DatabaseManager for setUp - tests might need more specific mocks
+            mock_db_manager = MagicMock(spec=DatabaseManager)
+            # Create the scanner, passing the required db_manager (mocked)
+            self.scanner = FileScannerService(
+                root_path=self.temp_dir.name, db_manager=mock_db_manager
+            )
 
     def tearDown(self):
         self.temp_dir.cleanup()

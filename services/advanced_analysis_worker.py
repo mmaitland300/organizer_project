@@ -8,31 +8,39 @@ Adjusted manager shutdown timing.
 """
 # --- (Keep all imports and the _analyze_file_process_worker function as before) ---
 from __future__ import annotations
+
 import concurrent.futures as _cf
+import copy
 import logging
+import math
 import os
 import threading
 import time
-import math
-import copy
-from typing import Any, Dict, List, Optional
-from multiprocessing import Manager, Event as MPEvent
 import traceback
+from multiprocessing import Event as MPEvent
+from multiprocessing import Manager
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from services.database_manager import DatabaseManager
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from services.database_manager import DatabaseManager
 
 from PyQt5 import QtCore, QtWidgets
+
 from services.analysis_engine import AnalysisEngine
 
 try:
-    from config.settings import AUDIO_EXTENSIONS, ALL_FEATURE_KEYS
+    from config.settings import ALL_FEATURE_KEYS, AUDIO_EXTENSIONS
 except ImportError:
-    AUDIO_EXTENSIONS = {".wav", ".aiff", ".flac", ".mp3", ".ogg"}
-    ALL_FEATURE_KEYS: List[str] = []
+    AUDIO_EXTENSIONS = {
+        ".wav",
+        ".aiff",
+        ".flac",
+        ".mp3",
+        ".ogg",
+    }  # Keep audio ext fallback
+    # Let ALL_FEATURE_KEYS fail import if settings missing
 
 logger = logging.getLogger(__name__)
 

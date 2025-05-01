@@ -3,26 +3,26 @@
 import logging
 import os
 import shutil
+import time
 
 # Import Enum if ControllerState is used (it is)
 from enum import Enum  # Ensure this is imported
-import time
 from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtWidgets import (
-    QDialog,
-    QListWidget,
-    QVBoxLayout,
-    QDialogButtonBox,
-    QAbstractItemView,
-    QTableWidget,
-    QTableWidgetItem,
-    QHeaderView,
-)
 from PyQt5.QtCore import QUrl, pyqtSlot
 from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import (
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QHeaderView,
+    QListWidget,
+    QMessageBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+)
 from send2trash import send2trash
 
 from config.settings import AUDIO_EXTENSIONS  # Keep for checks if needed
@@ -39,13 +39,13 @@ from ui.controllers import (
     DuplicatesController,
     ScanController,
 )
+from ui.dialogs.duplicate_manager_dialog import DuplicateManagerDialog
 
 # Import dialogs used
 from ui.dialogs.feature_view_dialog import FeatureViewDialog  # Import the new dialog
-from ui.dialogs.duplicate_manager_dialog import DuplicateManagerDialog
 from ui.dialogs.multi_dim_tag_editor_dialog import MultiDimTagEditorDialog
-from ui.dialogs.waveform_dialog import WaveformDialog
 from ui.dialogs.spectrogram_dialog import SpectrogramDialog
+from ui.dialogs.waveform_dialog import WaveformDialog
 from ui.dialogs.waveform_player_widget import WaveformPlayerWidget
 from utils.helpers import bytes_to_unit, open_file_location
 
@@ -568,8 +568,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Create models (use the corrected FileTableModel from previous step)
         self.model = FileTableModel(
-            [], self.db_manager, self.size_unit
-        )  # <<< Pass db_manager
+            db_manager=self.db_manager, files=[], size_unit=self.size_unit
+        )
         self.proxyModel = FileFilterProxyModel(self)
         self.proxyModel.setSourceModel(self.model)
 

@@ -1,11 +1,12 @@
 # Filename: tests/test_spectrogram_service.py
 # With corrected test_file_not_found
 
-import unittest
-import unittest.mock as mock
-import numpy as np
 import os
 import sys  # Import sys for module checking
+import unittest
+import unittest.mock as mock
+
+import numpy as np
 
 # Mock librosa and numpy before importing the service if they might not be installed
 # This ensures tests can run even without the heavy dependencies
@@ -32,11 +33,11 @@ if MOCK_LIBS or "numpy" not in sys.modules:
 # If not, mock settings constants as well
 try:
     from config.settings import (
-        STFT_N_FFT,
+        SPECTROGRAM_CACHE_SIZE,
         STFT_HOP_LENGTH,
+        STFT_N_FFT,
         STFT_WIN_LENGTH,
         STFT_WINDOW,
-        SPECTROGRAM_CACHE_SIZE,
     )
 except ImportError:
     # Fallback values if settings aren't available during testing
@@ -45,7 +46,6 @@ except ImportError:
 
 # Now import the service
 from services.spectrogram_service import SpectrogramService
-
 
 # Use a known dummy file path for tests
 DUMMY_FILE_PATH = "/path/to/dummy/audio.wav"
@@ -149,7 +149,11 @@ class TestSpectrogramService(unittest.TestCase):
         # --- (This test method remains unchanged from the previous correct version) ---
         mock_compute.return_value = {"error": None}
         override_params = {"n_fft": 1024, "hop_length": 256, "window": "hamming"}
-        self.service.get_spectrogram_data(DUMMY_FILE_PATH, **override_params)
+        # Explicitly pass load_duration=None or its default value
+        default_load_duration = 30.0  # Or get from settings if possible
+        self.service.get_spectrogram_data(
+            DUMMY_FILE_PATH, load_duration=default_load_duration, **override_params
+        )
         expected_win_length = STFT_WIN_LENGTH
         mock_compute.assert_called_once_with(
             file_path=DUMMY_ABS_PATH,
@@ -157,7 +161,7 @@ class TestSpectrogramService(unittest.TestCase):
             hop_length=256,
             win_length=expected_win_length,
             window="hamming",
-            load_duration=mock.ANY,
+            load_duration=default_load_duration,  # Check correct load_duration was passed
         )
 
     # --- CORRECTED test_file_not_found ---

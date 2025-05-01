@@ -4,12 +4,11 @@
 
 import datetime
 import os  # <<< Added import
-import pytest
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 from unittest.mock import MagicMock  # <<< Added import
 
-from PyQt5.QtCore import Qt, QModelIndex  # <<< Added QModelIndex
-
+import pytest
+from PyQt5.QtCore import QModelIndex, Qt  # <<< Added QModelIndex
 
 from models.file_model import FileFilterProxyModel, FileTableModel
 
@@ -53,7 +52,7 @@ def file_model(db_manager: DatabaseManager) -> FileTableModel:
     import copy
 
     test_data = copy.deepcopy(SAMPLE_FILE_INFO_LIST)
-    model = FileTableModel(test_data, db_manager=db_manager, size_unit="KB")
+    model = FileTableModel(db_manager=db_manager, files=test_data, size_unit="KB")
     return model
 
 
@@ -92,7 +91,7 @@ def test_setData_edit(file_model: FileTableModel):
 
     # Mock the db save call to isolate model logic if preferred
     if hasattr(file_model, "_db_manager") and file_model._db_manager:
-        file_model._db_manager.save_file_record = MagicMock()
+        file_model._db_manager.save_file_record = MagicMock()  # type: ignore[method-assign]
 
     result = file_model.setData(index, new_key_value, role=Qt.EditRole)
     assert result is True
@@ -126,14 +125,7 @@ def filter_proxy_model(db_manager: DatabaseManager) -> FileFilterProxyModel:
         item.clear()
         item.update(base_copy)
     source_model = FileTableModel(
-        filter_test_data, db_manager=db_manager, size_unit="KB"
-    )
-    proxy = FileFilterProxyModel()
-    proxy.setSourceModel(source_model)
-    return proxy
-
-    source_model = FileTableModel(
-        filter_test_data, db_manager=db_manager, size_unit="KB"
+        db_manager=db_manager, files=filter_test_data, size_unit="KB"
     )
     proxy = FileFilterProxyModel()
     proxy.setSourceModel(source_model)
@@ -386,7 +378,10 @@ def run_advanced_filter(proxy_model, db_manager, query, file_info_list):
 
     # Instantiate real source model - requires db_manager fixture
     source_model = FileTableModel(
-        populated_file_info, db_manager=db_manager, size_unit="KB"
+        db_manager=db_manager,  # Pass db_manager using keyword
+        files=populated_file_info,  # Pass files using keyword
+        size_unit="KB",  # Pass size_unit using keyword
+        # parent=None                   # Optional parent
     )
 
     # Set the real source model on the proxy

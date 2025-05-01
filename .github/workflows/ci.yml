@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: [3.11]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: |
+          poetry config virtualenvs.create false
+          poetry install --no-interaction --with dev
+
+      - name: Check formatting (Black)
+        run: poetry run black --check .
+        continue-on-error: true
+
+      - name: Check import sorting (isort)
+        run: poetry run isort --check-only .
+
+      - name: Lint (Flake8)
+        run: poetry run flake8 .
+        continue-on-error: true
+
+      - name: Type-check (Mypy)
+        run: poetry run mypy .
+        continue-on-error: true
+
+      - name: Run tests
+        run: poetry run pytest -q --maxfail=1 --disable-warnings

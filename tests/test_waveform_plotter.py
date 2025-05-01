@@ -25,8 +25,8 @@ class TestWaveformPlotter(unittest.TestCase):
         # One line should be drawn, with non-empty data
         self.assertEqual(len(lines), 1)
         xs, ys = lines[0].get_data()
-        self.assertGreater(len(xs), 0)
-        self.assertGreater(len(ys), 0)
+        self.assertGreater(len(xs), 0)  # type: ignore[arg-type]
+        self.assertGreater(len(ys), 0)  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

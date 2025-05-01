@@ -1,10 +1,17 @@
 # Filename: services/spectrogram_service.py
 # New File
 
-import os
-import logging
 import functools
-from typing import Any, Dict, Optional, Tuple
+import logging
+import os
+from typing import (  # For TypeAlias if needed
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Optional,
+    Tuple,
+    Type,
+)
 
 # Dependency Checks & Imports
 try:
@@ -12,7 +19,7 @@ try:
 
     NUMPY_AVAILABLE = True
 except ImportError:
-    np = None
+    np = None  # type: ignore[assignment] # Runtime assignment
     NUMPY_AVAILABLE = False
 
 try:
@@ -22,20 +29,20 @@ try:
 
         LIBROSA_AVAILABLE = True
     else:
-        librosa = None
+        librosa = None  # type: ignore[assignment]
         LIBROSA_AVAILABLE = False
 except ImportError:
-    librosa = None
+    librosa = None  # type: ignore[assignment]
     LIBROSA_AVAILABLE = False
 
 # Import settings constants
 try:
     from config.settings import (
-        STFT_N_FFT,
+        SPECTROGRAM_CACHE_SIZE,
         STFT_HOP_LENGTH,
+        STFT_N_FFT,
         STFT_WIN_LENGTH,
         STFT_WINDOW,
-        SPECTROGRAM_CACHE_SIZE,
     )
 except ImportError:
     logging.critical("Could not import STFT settings. Spectrogram Service may fail.")

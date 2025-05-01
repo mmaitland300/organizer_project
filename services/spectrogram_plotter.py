@@ -3,7 +3,7 @@
 
 import logging
 import os
-from typing import Optional, Any
+from typing import Any, Optional
 
 # --- Matplotlib and Librosa Imports ---
 try:
@@ -11,8 +11,8 @@ try:
 
     matplotlib.use("Qt5Agg")  # Ensure Qt5 backend is used
     import matplotlib.pyplot as plt
-    from matplotlib.figure import Figure
     from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
 
     # No FigureCanvas or Toolbar needed here
     MATPLOTLIB_AVAILABLE = True
@@ -27,7 +27,7 @@ try:
 
     NUMPY_AVAILABLE = True
 except ImportError:
-    np = None
+    np = None  # type: ignore[assignment]
     NUMPY_AVAILABLE = False
 
 try:
@@ -37,10 +37,10 @@ try:
 
         LIBROSA_AVAILABLE = True
     else:
-        librosa = None
+        librosa = None  # type: ignore[assignment]
         LIBROSA_AVAILABLE = False
 except ImportError:
-    librosa = None
+    librosa = None  # type: ignore[assignment]
     LIBROSA_AVAILABLE = False
 
 # --- Application Imports ---
@@ -49,7 +49,7 @@ try:
 
     SERVICE_AVAILABLE = True
 except ImportError:
-    SpectrogramService = None  # type: ignore
+    SpectrogramService = None  # type: ignore[assignment]
     SERVICE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class SpectrogramPlotter:
 
     @staticmethod
     def _apply_theme_to_axes(
-        ax: Axes, figure: Figure, theme: str, colorbar: Optional[Any] = None
+        ax: Axes, figure: Figure, theme: str, colorbar: Optional[Any] = None  # type: ignore
     ):
         """Applies theme colors to the plot elements for better readability."""
         if not ax or not figure:
@@ -86,7 +86,7 @@ class SpectrogramPlotter:
 
             # Set color for axes borders (spines)
             for spine in ax.spines.values():
-                spine.set_edgecolor(grid_color)
+                spine.set_edgecolor(grid_color) # type: ignore[attr-defined]
 
             # Set color for ticks and tick labels
             ax.tick_params(axis="x", colors=text_color, labelcolor=text_color)
@@ -117,7 +117,7 @@ class SpectrogramPlotter:
             logger.error(f"Error applying theme to axes: {theme_err}", exc_info=False)
 
     @staticmethod
-    def plot(file_path: str, ax: Axes, figure: Figure, theme: str = "light") -> bool:
+    def plot(file_path: str, ax: Axes, figure: Figure, theme: str = "light") -> bool:  # type: ignore
         """
         Generates and displays the spectrogram for the given audio file path
         onto the provided Matplotlib Axes.
@@ -157,7 +157,7 @@ class SpectrogramPlotter:
             )  # Style error message
             return False
 
-        if not SpectrogramService:  # Should be caught above, but double check
+        if not SERVICE_AVAILABLE:
             msg = "SpectrogramService not available."
             logger.error(msg)
             ax.cla()

@@ -1,24 +1,25 @@
 # tests/conftest.py
-import os
-import pytest
 import logging
-from sqlalchemy import (
+import os
+from typing import Generator  # Import Generator for type hint fix
+
+import pytest
+from sqlalchemy import (  # Ensure 'text' is imported if using raw SQL cleanup
     create_engine,
     text,
-)  # Ensure 'text' is imported if using raw SQL cleanup
+)
 from sqlalchemy.engine import Engine
-from typing import Generator  # Import Generator for type hint fix
 
 # --- Alembic Imports ---
 try:
-    from alembic.config import Config
     from alembic import command
+    from alembic.config import Config
 
     ALEMBIC_AVAILABLE = True
 except ImportError:
     ALEMBIC_AVAILABLE = False
-    Config = None
-    command = None
+    Config = None  # type: ignore[assignment, misc] # Ignore both errors here
+    command = None  # type: ignore[assignment]
 
 # Import the DatabaseManager class (ensure path is correct)
 from services.database_manager import DatabaseManager
