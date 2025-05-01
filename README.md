@@ -65,6 +65,8 @@ MUSICIANS_ORGANIZER/
 │   ├── file_scanner.py
 │   ├── hash_worker.py
 │   ├── schema.py
+│   └── spectrogram_plotter.py
+│   └── spectrogram_service.py
 │   └── waveform_plotter.py
 ├── ui/
 │   ├── __init__.py
@@ -75,6 +77,7 @@ MUSICIANS_ORGANIZER/
 │       ├── duplicate_manager_dialog.py
 │       ├── feature_view_dialog.py
 │       ├── multi_dim_tag_editor_dialog.py
+│       ├── spectrogram_dialog.py
 │       ├── waveform_dialog.py
 │       └── waveform_player_widget.py
 ├── utils/
