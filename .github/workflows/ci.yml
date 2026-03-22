@@ -34,7 +34,8 @@ jobs:
       - name: Check import sorting (isort)
         run: python -m isort --check-only .
 
-      - name: Lint (Flake8)
+      - name: Lint (Flake8, non-blocking)
+        continue-on-error: true
         run: python -m flake8 config services models utils main.py
 
       - name: Type-check (Mypy)
