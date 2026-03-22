@@ -10,7 +10,15 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import QUrl
-from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
+
+try:
+    from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
+
+    QT_MULTIMEDIA_AVAILABLE = True
+except ImportError:
+    QMediaContent = None  # type: ignore[assignment]
+    QMediaPlayer = None  # type: ignore[assignment]
+    QT_MULTIMEDIA_AVAILABLE = False
 
 from config.settings import ENABLE_WAVEFORM_PREVIEW
 from services.waveform_plotter import WaveformPlotter
@@ -27,14 +35,18 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
         super().__init__(parent)
         self.file_path = file_path
         self.theme = theme.lower()
-        self.player: Optional[QMediaPlayer] = None
+        self.player: Optional[Any] = None
         self.cursor_line: Optional[Any] = None
 
         self.setup_ui()
+        self.init_player()
         if ENABLE_WAVEFORM_PREVIEW:
             self.load_audio_and_plot()
-        self.init_player()
         self.applyTheme(self.theme)
+
+        if not QT_MULTIMEDIA_AVAILABLE:
+            self.playButton.setEnabled(False)
+            self.playButton.setToolTip("Audio playback is unavailable on this system.")
 
     def setup_ui(self) -> None:
         layout = QtWidgets.QVBoxLayout(self)
@@ -76,6 +88,8 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
         self.canvas.draw()
 
     def init_player(self) -> None:
+        if not QT_MULTIMEDIA_AVAILABLE or QMediaPlayer is None or QMediaContent is None:
+            return
         self.player = QMediaPlayer(self)
         url = QUrl.fromLocalFile(os.path.abspath(self.file_path))
         self.player.setMedia(QMediaContent(url))
@@ -96,6 +110,14 @@ class WaveformPlayerWidget(QtWidgets.QWidget):
         self.canvas.draw()
 
     def toggle_playback(self) -> None:
+        if not QT_MULTIMEDIA_AVAILABLE or self.player is None or QMediaPlayer is None:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Playback Unavailable",
+                "Audio playback is unavailable on this system.",
+            )
+            return
+
         if self.player.state() == QMediaPlayer.PlayingState:
             self.player.pause()
             self.playButton.setText("Play")
