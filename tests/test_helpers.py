@@ -50,13 +50,12 @@ class TestHelpers(unittest.TestCase):
             os.remove(file_path)
 
     def test_open_file_location(self):
-        # Instead of calling the actual os.startfile,
-        # we patch it to prevent an access violation.
-        with patch("os.startfile") as mock_startfile:
-            # Call the function with a dummy file path.
-            open_file_location("/dummy/path/file.txt")
-            # Check that os.startfile was called with the directory part.
-            mock_startfile.assert_called_once_with("/dummy/path")
+        # Force Windows branch so the test is cross-platform.
+        with patch("platform.system", return_value="Windows"):
+            # os.startfile is Windows-only; create=True avoids AttributeError on non-Windows.
+            with patch("os.startfile", create=True) as mock_startfile:
+                open_file_location("/dummy/path/file.txt")
+                mock_startfile.assert_called_once_with("/dummy/path")
 
 
 if __name__ == "__main__":
