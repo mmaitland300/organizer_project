@@ -287,7 +287,7 @@ class AnalysisEngine:
                 features["spectral_contrast_mean"] = None
 
         # MFCCs (Uses S_mel)
-        if f"mfcc1_mean" in features:  # Check if MFCCs are expected
+        if "mfcc1_mean" in features:  # Check if MFCCs are expected
             if cancel_event and cancel_event.is_set():
                 return {}
             try:

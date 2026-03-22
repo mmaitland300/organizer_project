@@ -10,7 +10,6 @@ This module defines:
 
 import datetime
 import logging
-import math
 import os
 import re  # <<< Added for regex parsing
 from typing import (  # Use for type hinting only if needed to avoid circular imports at runtime
@@ -23,9 +22,6 @@ from typing import (  # Use for type hinting only if needed to avoid circular im
 )
 
 from PyQt5 import QtCore
-
-# ADD DatabaseManager type hint import
-from services.database_manager import DatabaseManager
 
 if TYPE_CHECKING:
     from services.database_manager import DatabaseManager
@@ -566,7 +562,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
                     current_negated = False
                     current_op = "AND"  # Reset to default AND unless next token is OR
                 elif term != term_stripped:  # Log if only whitespace was ignored
-                    logger.debug(f"Ignored term consisting only of whitespace.")
+                    logger.debug("Ignored term consisting only of whitespace.")
 
         # Check for trailing unprocessed text (e.g., trailing operator)
         if last_pos < len(query_string) and query_string[last_pos:].strip():
@@ -745,7 +741,6 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
 
         match_found = False
         for field in fields_to_check:
-            value_to_check: Optional[Union[str, Dict, List]] = None
             target_text: Optional[str] = None
 
             if field == "name":
