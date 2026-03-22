@@ -125,6 +125,12 @@ Main runtime path:
 - `services/database_manager.py` manages upsert/query/statistics/similarity logic
 - `services/schema.py` + `migrations/` define schema and migrations
 
+## Workflow Evidence
+
+- Concrete walkthrough artifact: `docs/workflow-walkthrough.md`
+- The walkthrough captures a full operational loop (scan -> dedupe -> analyze ->
+  filter/tag -> similar search) with expected outcomes and optional DB checks.
+
 ## Tradeoffs and Limitations
 
 - **Operational cost:** Advanced analysis is CPU-heavy on large libraries.
