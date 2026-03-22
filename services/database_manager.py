@@ -575,14 +575,16 @@ class DatabaseManager:
                                 )
                                 continue
 
-                            sql = text(f"""
+                            sql = text(
+                                f"""
                                 SELECT
                                     COUNT("{feature_key}"),
                                     SUM("{feature_key}"),
                                     SUM("{feature_key}" * "{feature_key}")
                                 FROM files
                                 WHERE "{feature_key}" IS NOT NULL AND ABS("{feature_key}") < 1e30
-                            """)  # Use text() and quote identifier
+                            """
+                            )  # Use text() and quote identifier
 
                             count = 0
                             mean = 0.0
