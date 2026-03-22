@@ -7,7 +7,6 @@ It groups files by size and then by an MD5 hash (computed with timeout and file 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore

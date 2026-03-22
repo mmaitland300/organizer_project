@@ -13,16 +13,12 @@ from __future__ import annotations
 import concurrent.futures as _cf
 import copy
 import logging
-import math
 import os
 import threading
-import time
 import traceback
 from multiprocessing import Event as MPEvent
 from multiprocessing import Manager
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
-
-from services.database_manager import DatabaseManager
 
 if TYPE_CHECKING:
     from services.database_manager import DatabaseManager
@@ -32,7 +28,7 @@ from PyQt5 import QtCore, QtWidgets
 from services.analysis_engine import AnalysisEngine
 
 try:
-    from config.settings import ALL_FEATURE_KEYS, AUDIO_EXTENSIONS
+    from config.settings import AUDIO_EXTENSIONS
 except ImportError:
     AUDIO_EXTENSIONS = {
         ".wav",

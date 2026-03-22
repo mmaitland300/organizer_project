@@ -1,13 +1,11 @@
 # FILE: services/schema.py
 import logging  # Add logging
-import os
 
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
     Column,
     Float,
-    Index,
     Integer,
     MetaData,
     Table,

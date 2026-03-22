@@ -10,12 +10,10 @@ import logging
 import math
 import os
 import threading
-from typing import Any, Dict, List, Optional, Tuple, Union
-
-import numpy as np
+from typing import Any, Dict, List, Optional
 
 # ---> Add SQLAlchemy imports <---
-from sqlalchemy import create_engine, delete, insert, select, text
+from sqlalchemy import delete, select, text
 
 # Import specific dialect construct for ON CONFLICT
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
