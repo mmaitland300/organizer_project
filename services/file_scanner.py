@@ -25,7 +25,7 @@ from services.cache_manager import CacheManager
 from services.database_manager import DatabaseManager
 
 # Keep helpers import for key detection (if kept) and potentially hash (if added later)
-from utils.helpers import compute_hash, detect_key_from_filename
+from utils.helpers import detect_key_from_filename
 
 logger = logging.getLogger(__name__)
 # Ensure logger level is set appropriately (DEBUG is useful during development)
