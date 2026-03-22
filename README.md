@@ -96,14 +96,20 @@ alembic upgrade head
 ## Reproducible Verification Steps
 
 Run from the repository root with your virtual environment active.
-These are the same check commands used in CI:
+The commands below mirror current CI behavior:
 
 ```bash
 python -m black --check .
 python -m isort --check-only .
-python -m flake8 .
 python -m mypy .
 python -m pytest -q --maxfail=1 --disable-warnings
+```
+
+Flake8 currently runs in CI as an advisory (non-blocking) scoped check while
+legacy lint debt is reduced in planned cleanup passes:
+
+```bash
+python -m flake8 config services models utils main.py
 ```
 
 ## Architecture and Runtime Workflow
