@@ -1861,7 +1861,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if delete_action:
             delete_action.setEnabled(can_operate_on_selection)
         if preview_action:
-            preview_action.setEnabled(can_operate_on_selection and QT_MULTIMEDIA_AVAILABLE)
+            preview_action.setEnabled(
+                can_operate_on_selection and QT_MULTIMEDIA_AVAILABLE
+            )
         if send_cubase_action:
             send_cubase_action.setEnabled(
                 can_operate_on_selection and bool(self.cubase_folder)
@@ -2134,8 +2136,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def applyLightThemeStylesheet(self) -> None:
         # Stylesheet content from previous response
-        self.setStyleSheet(
-            """
+        self.setStyleSheet("""
             QMainWindow { background-color: #ffffff; color: #000000; }
             QToolBar { background-color: #f0f0f0; spacing: 6px; border-bottom: 1px solid #cccccc;}
             QToolBar QToolButton { background-color: transparent; color: #000000;
@@ -2169,13 +2170,11 @@ class MainWindow(QtWidgets.QMainWindow):
             QSplitter::handle { background-color: #f0f0f0; }
             QSplitter::handle:horizontal { width: 1px; }
             QSplitter::handle:vertical { height: 1px; }
-        """
-        )
+        """)
 
     def applyDarkThemeStylesheet(self) -> None:
         # Stylesheet content from previous response
-        self.setStyleSheet(
-            """
+        self.setStyleSheet("""
             QMainWindow { background-color: #282c34; color: #abb2bf; }
             QToolBar { background-color: #21252b; spacing: 6px; border-bottom: 1px solid #3a3f4b;}
             QToolBar QToolButton { background-color: transparent; color: #abb2bf;
@@ -2213,8 +2212,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QSplitter::handle { background-color: #21252b; }
             QSplitter::handle:horizontal { width: 1px; }
             QSplitter::handle:vertical { height: 1px; }
-        """
-        )
+        """)
 
     def showHelpDialog(self) -> None:
         help_text = (
