@@ -44,12 +44,13 @@ except ImportError:
     LIBROSA_AVAILABLE = False
 
 # --- Application Imports ---
+SpectrogramServiceClass: Optional[type[Any]] = None
 try:
-    from services.spectrogram_service import SpectrogramService
+    from services.spectrogram_service import SpectrogramService as _SpectrogramService
 
+    SpectrogramServiceClass = _SpectrogramService
     SERVICE_AVAILABLE = True
 except ImportError:
-    SpectrogramService = None  # type: ignore[assignment]
     SERVICE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -172,7 +173,10 @@ class SpectrogramPlotter:
 
         # --- Get Spectrogram Data ---
         try:
-            service = SpectrogramService()
+            if SpectrogramServiceClass is None:
+                logger.error("SpectrogramService class unavailable at runtime.")
+                return False
+            service = SpectrogramServiceClass()
             # Using load_duration=None to attempt loading full file (service might have internal limit)
             spec_data = service.get_spectrogram_data(file_path, load_duration=None)
         except Exception as e:
