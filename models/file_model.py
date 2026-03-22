@@ -278,8 +278,8 @@ class FileTableModel(QtCore.QAbstractTableModel):
             except IndexError:
                 return False
 
-            original_value = None
-            new_value = None
+            original_value: Any = None
+            new_value: Any = None
 
             if header == "BPM":
                 original_value = file_info.get("bpm")
@@ -291,7 +291,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
                 if original_value != new_value:
                     file_info["bpm"] = new_value
                     needs_db_save = True
-                    data_changed = True  # type: ignore[assignment]
+                    data_changed = True
 
             elif header == "Key":
                 original_value = file_info.get("key", "")
@@ -299,7 +299,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
                 if original_value != new_value:
                     file_info["key"] = new_value
                     needs_db_save = True
-                    data_changed = True  # type: ignore[assignment]
+                    data_changed = True
 
             elif header == "Tags":
                 original_value = file_info.get("tags", {})
@@ -308,7 +308,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
                     if original_value != new_value:
                         file_info["tags"] = new_value
                         needs_db_save = True
-                        data_changed = True  # type: ignore[assignment]
+                        data_changed = True
                 except Exception:
                     return False  # Failed to parse
 
