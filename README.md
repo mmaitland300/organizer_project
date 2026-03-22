@@ -95,7 +95,8 @@ alembic upgrade head
 
 ## Reproducible Verification Steps
 
-Run from the repository root with your virtual environment active:
+Run from the repository root with your virtual environment active.
+These are the same check commands used in CI:
 
 ```bash
 python -m black --check .
