@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QUrl, pyqtSlot
-from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -46,8 +45,16 @@ from ui.dialogs.feature_view_dialog import FeatureViewDialog  # Import the new d
 from ui.dialogs.multi_dim_tag_editor_dialog import MultiDimTagEditorDialog
 from ui.dialogs.spectrogram_dialog import SpectrogramDialog
 from ui.dialogs.waveform_dialog import WaveformDialog
-from ui.dialogs.waveform_player_widget import WaveformPlayerWidget
 from utils.helpers import bytes_to_unit, open_file_location
+
+try:
+    from PyQt5.QtMultimedia import QMediaContent, QMediaPlayer
+
+    QT_MULTIMEDIA_AVAILABLE = True
+except ImportError:
+    QMediaContent = None  # type: ignore[assignment]
+    QMediaPlayer = None  # type: ignore[assignment]
+    QT_MULTIMEDIA_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -209,7 +216,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- END State Flag ---
 
         # --- Media Player ---
-        self.player = QMediaPlayer(self)
+        self.player: Optional[Any] = None
+        if QT_MULTIMEDIA_AVAILABLE and QMediaPlayer is not None:
+            self.player = QMediaPlayer(self)
 
         # --- Initialize UI Elements (Models will be created in initUI) ---
         self.model: Optional[FileTableModel] = None
@@ -241,7 +250,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- Setup UI ---
         self.initUI()
         ## --- Connect Media Player Signals ---
-        self.player.stateChanged.connect(self.on_player_state_changed)
+        if self.player is not None:
+            self.player.stateChanged.connect(self.on_player_state_changed)
         # --- Connect Controller Signals ---
         self._connect_controller_signals()
 
@@ -731,7 +741,11 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         logger.info("Stop action triggered.")
         # Stop audio player
-        if self.player.state() == QMediaPlayer.PlayingState:
+        if (
+            self.player is not None
+            and QMediaPlayer is not None
+            and self.player.state() == QMediaPlayer.PlayingState
+        ):
             self.player.stop()
             logger.debug("Audio playback stopped.")
 
@@ -858,6 +872,13 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
     def previewSelected(self) -> None:
+        if not QT_MULTIMEDIA_AVAILABLE or self.player is None:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Preview Unavailable",
+                "Audio preview is unavailable on this system.",
+            )
+            return
         path = self.getSelectedFilePath()
         if path:
             if path.lower().endswith(tuple(AUDIO_EXTENSIONS)):
@@ -885,8 +906,25 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
 
     def launchWaveformPlayer(self) -> None:
+        if not QT_MULTIMEDIA_AVAILABLE:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Waveform Player Unavailable",
+                "Audio preview is unavailable on this system.",
+            )
+            return
+
         path = self.getSelectedFilePath()
         if path and path.lower().endswith(tuple(AUDIO_EXTENSIONS)):
+            try:
+                from ui.dialogs.waveform_player_widget import WaveformPlayerWidget
+            except ImportError:
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Waveform Player Unavailable",
+                    "Audio preview is unavailable on this system.",
+                )
+                return
             player_widget = WaveformPlayerWidget(path, theme=self.theme, parent=self)
             dialog = QtWidgets.QDialog(self)
             dialog.setWindowTitle("Waveform Player")
@@ -1316,8 +1354,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._update_ui_state()
 
-    @pyqtSlot(QMediaPlayer.State)  # Connected to QMediaPlayer.stateChanged
-    def on_player_state_changed(self, state: QMediaPlayer.State) -> None:
+    @pyqtSlot(object)  # Connected to QMediaPlayer.stateChanged when available
+    def on_player_state_changed(self, state: object) -> None:
         """Handles state changes from the QMediaPlayer."""
         # Argument 'state' (QMediaPlayer.State) is available if needed
         logger.debug(f"Player state changed: {state}")
@@ -1770,7 +1808,11 @@ class MainWindow(QtWidgets.QMainWindow):
         logger.debug(f"File count for UI state checks: {file_count}")
 
         # Check player state and selection state
-        is_player_active = self.player.state() == QMediaPlayer.PlayingState
+        is_player_active = bool(
+            self.player is not None
+            and QMediaPlayer is not None
+            and self.player.state() == QMediaPlayer.PlayingState
+        )
         is_selection = self.tableView.selectionModel().hasSelection()
         is_single_selection = len(self.tableView.selectionModel().selectedRows()) == 1
 
@@ -1819,7 +1861,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if delete_action:
             delete_action.setEnabled(can_operate_on_selection)
         if preview_action:
-            preview_action.setEnabled(can_operate_on_selection)
+            preview_action.setEnabled(can_operate_on_selection and QT_MULTIMEDIA_AVAILABLE)
         if send_cubase_action:
             send_cubase_action.setEnabled(
                 can_operate_on_selection and bool(self.cubase_folder)
