@@ -20,7 +20,8 @@ def parse_multi_dim_tags(tag_string: str) -> dict:
     """
     Parse a string into a multi-dimensional tag dictionary.
 
-    Tokens with a colon are split into dimension and value; tokens without are stored under "general".
+    Tokens with a colon are split into dimension and value.
+    Tokens without are stored under "general".
     """
     if not isinstance(tag_string, str):
         raise ValueError("Tag string must be of type string")
