@@ -127,7 +127,7 @@ Main runtime path:
 
 ## Workflow Evidence
 
-- Concrete walkthrough artifact: `docs/workflow-walkthrough.md`
+- Concrete walkthrough artifact: [`docs/workflow-walkthrough.md`](docs/workflow-walkthrough.md)
 - The walkthrough captures a full operational loop (scan -> dedupe -> analyze ->
   filter/tag -> similar search) with expected outcomes and optional DB checks.
 
