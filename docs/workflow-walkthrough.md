@@ -47,6 +47,15 @@ quickly see how the application is intended to be used in practice.
 
 These checks are optional but useful for proving persistence after workflow steps:
 
+PowerShell:
+
+```powershell
+$dbPath = if ($env:MUSICORG_DB_PATH) { $env:MUSICORG_DB_PATH } else { "$HOME/.musicians_organizer.db" }
+python -c "import sqlite3; con=sqlite3.connect(r'$dbPath'); cur=con.cursor(); cur.execute('SELECT COUNT(*) FROM files;'); print('rows:', cur.fetchone()[0]); cur.execute('SELECT COUNT(*) FROM files WHERE loudness_lufs IS NOT NULL;'); print('rows_with_lufs:', cur.fetchone()[0]); con.close()"
+```
+
+Bash (macOS/Linux):
+
 ```bash
 python - <<'PY'
 import os
