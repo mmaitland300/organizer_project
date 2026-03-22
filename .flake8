@@ -1,5 +1,5 @@
 # Flake8 does not read [tool.flake8] from pyproject.toml without flake8-pyproject.
-# Use a pragmatic line-length cap here while legacy UI files are incrementally cleaned up.
+# Keep this file as the single flake8 source of truth.
 [flake8]
-max-line-length = 220
+max-line-length = 88
 extend-ignore = E203, W503
