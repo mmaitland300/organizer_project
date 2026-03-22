@@ -12,12 +12,12 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 
-from PyQt5 import QtWidgets
+from PyQt5 import QtWidgets  # noqa: E402
 
 # --- Import necessary components ---
-from config.settings import get_engine  # Import the engine factory
-from services.database_manager import DatabaseManager
-from ui.main_window import MainWindow
+from config.settings import get_engine  # noqa: E402
+from services.database_manager import DatabaseManager  # noqa: E402
+from ui.main_window import MainWindow  # noqa: E402
 
 
 def main():

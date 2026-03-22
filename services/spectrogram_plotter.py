@@ -191,7 +191,7 @@ class SpectrogramPlotter:
                 color=text_color,
             )
             ax.set_title(
-                f"Spectrogram Error", color=text_color
+                "Spectrogram Error", color=text_color
             )  # Set title color here too
             SpectrogramPlotter._apply_theme_to_axes(ax, figure, theme)
             return False

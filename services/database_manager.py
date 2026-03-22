@@ -186,7 +186,7 @@ class DatabaseManager:
                 logger.debug(
                     f"Record saved/updated via SQLAlchemy for {file_info.get('path')}"
                 )
-            logger.debug(f"Lock RELEASED for save_file_record (SQLAlchemy)")
+            logger.debug("Lock RELEASED for save_file_record (SQLAlchemy)")
         except Exception as e:
             logger.error(
                 f"Failed to save file record (SQLAlchemy) for {file_info.get('path')}. Params: {params}. Error: {e}",
@@ -259,7 +259,7 @@ class DatabaseManager:
                     logger.info(
                         f"SQLAlchemy batch save attempt complete. Saved: {saved_count}, Failed: {failed_count}."
                     )
-            logger.debug(f"Lock RELEASED for batch save (SQLAlchemy)")
+            logger.debug("Lock RELEASED for batch save (SQLAlchemy)")
 
         except Exception as e:
             logger.error(
@@ -360,7 +360,7 @@ class DatabaseManager:
                     if row and column_names:
                         return self._row_to_dict(row, column_names)
                     return None  # Not found
-            logger.debug(f"Lock RELEASED for get_file_record (SQLAlchemy)")
+            logger.debug("Lock RELEASED for get_file_record (SQLAlchemy)")
         except Exception as e:
             logger.error(
                 f"Failed to fetch record (SQLAlchemy) for {file_path}: {e}",
@@ -417,7 +417,7 @@ class DatabaseManager:
                         logger.info(
                             f"Deleted {result.rowcount} record(s) (SQLAlchemy) for path: {file_path}"
                         )
-            logger.debug(f"Lock RELEASED for delete_file_record (SQLAlchemy)")
+            logger.debug("Lock RELEASED for delete_file_record (SQLAlchemy)")
         except Exception as e:
             logger.error(
                 f"Failed to delete file record (SQLAlchemy) for {file_path}: {e}",
@@ -453,7 +453,7 @@ class DatabaseManager:
                         logger.info(
                             f"Deleted {result.rowcount} old records (SQLAlchemy) matching prefix: {folder_path_norm}"
                         )
-            logger.debug(f"Lock RELEASED for delete_files_in_folder (SQLAlchemy)")
+            logger.debug("Lock RELEASED for delete_files_in_folder (SQLAlchemy)")
         except Exception as e:
             logger.error(
                 f"Failed to delete folder records (SQLAlchemy) for {folder_path_norm}: {e}",
@@ -492,7 +492,7 @@ class DatabaseManager:
                     logger.debug(
                         f"Fetched {len(results)} records (SQLAlchemy) matching prefix: {folder_path_norm}"
                     )
-            logger.debug(f"Lock RELEASED for get_files_in_folder (SQLAlchemy)")
+            logger.debug("Lock RELEASED for get_files_in_folder (SQLAlchemy)")
         except Exception as e:
             logger.error(
                 f"Failed to fetch folder records (SQLAlchemy) for {folder_path_norm}: {e}",
@@ -527,7 +527,7 @@ class DatabaseManager:
                     if row and column_names:
                         return self._row_to_dict(row, column_names)
                     return None  # Not found or column names failed
-            logger.debug(f"Lock RELEASED for get_file_record_by_id (SQLAlchemy)")
+            logger.debug("Lock RELEASED for get_file_record_by_id (SQLAlchemy)")
         except Exception as e:
             logger.error(
                 f"Failed to fetch record (SQLAlchemy) for ID {record_id}: {e}",
@@ -681,14 +681,14 @@ class DatabaseManager:
         """Saves calculated statistics to the JSON cache file (thread-safe)."""
         logger.debug(f"Attempting lock to save stats cache: {STATS_CACHE_FILENAME}")
         with self._lock:  # Acquire lock for file write
-            logger.debug(f"Lock ACQUIRED for save stats cache.")
+            logger.debug("Lock ACQUIRED for save stats cache.")
             try:
                 with open(STATS_CACHE_FILENAME, "w") as f:
                     json.dump(stats, f, indent=4)
-                logger.debug(f"Successfully saved stats cache.")
+                logger.debug("Successfully saved stats cache.")
             except Exception as e:
                 logger.error(f"Failed to save statistics cache: {e}", exc_info=True)
-        logger.debug(f"Lock RELEASED for save stats cache.")
+        logger.debug("Lock RELEASED for save stats cache.")
 
     def _load_stats_from_cache(self) -> Optional[Dict[str, Dict[str, float]]]:
         """Loads statistics from the JSON cache file (thread-safe)."""
@@ -697,7 +697,7 @@ class DatabaseManager:
         logger.debug(f"Attempting lock to load stats cache: {STATS_CACHE_FILENAME}")
         stats = None
         with self._lock:  # Acquire lock for file read
-            logger.debug(f"Lock ACQUIRED for load stats cache.")
+            logger.debug("Lock ACQUIRED for load stats cache.")
             try:
                 with open(STATS_CACHE_FILENAME, "r") as f:
                     loaded_data = json.load(f)
@@ -707,12 +707,12 @@ class DatabaseManager:
                     for v in loaded_data.values()
                 ):
                     stats = loaded_data
-                    logger.debug(f"Successfully loaded stats cache.")
+                    logger.debug("Successfully loaded stats cache.")
                 else:
                     logger.warning("Statistics cache file format invalid.")
             except Exception as e:
                 logger.error(f"Failed to load statistics cache: {e}", exc_info=True)
-        logger.debug(f"Lock RELEASED for load stats cache.")
+        logger.debug("Lock RELEASED for load stats cache.")
         return stats
 
     # --- REFACTORED Public Statistics Method ---
@@ -902,7 +902,7 @@ class DatabaseManager:
                         }
                     )
                 return similar_files
-            logger.debug(f"Lock RELEASED for find_similar_files_unscaled (SQLAlchemy)")
+            logger.debug("Lock RELEASED for find_similar_files_unscaled (SQLAlchemy)")
         except Exception as e:
             logger.error(
                 f"Failed unscaled similarity search (SQLAlchemy) for ID {reference_file_id}: {e}",

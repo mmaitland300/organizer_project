@@ -97,6 +97,7 @@ alembic upgrade head
 
 Run from the repository root with your virtual environment active.
 The commands below mirror current CI behavior:
+For a fresh local verification baseline, recreate `.venv` before running checks.
 
 ```bash
 python -m black --check .
