@@ -6,6 +6,7 @@ Uses ProcessPoolExecutor context manager and a multiprocessing Event for
 cancellation. Emits progress before processing results for better UI update.
 Adjusted manager shutdown timing.
 """
+
 # --- (Keep all imports and the _analyze_file_process_worker function as before) ---
 from __future__ import annotations
 

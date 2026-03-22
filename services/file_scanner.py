@@ -7,6 +7,7 @@ and handling cancellation. It performs a single pass directory walk, extracts
 basic metadata using TinyTag, checks cache/DB for existing records, and
 performs incremental DB sync.
 """
+
 import datetime
 import logging
 import os
