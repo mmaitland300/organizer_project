@@ -1354,7 +1354,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._update_ui_state()
 
-    @pyqtSlot(object)  # Connected to QMediaPlayer.stateChanged when available
     def on_player_state_changed(self, state: object) -> None:
         """Handles state changes from the QMediaPlayer."""
         # Argument 'state' (QMediaPlayer.State) is available if needed
