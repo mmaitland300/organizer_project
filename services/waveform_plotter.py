@@ -4,7 +4,7 @@ WaveformPlotter - utility for plotting downsampled audio waveforms.
 """
 
 import logging
-import os  # <<< Import the 'os' module
+import os
 from typing import Any
 
 import librosa
@@ -27,15 +27,13 @@ class WaveformPlotter:
             times = np.linspace(0, len(y) / sr, num=len(y_ds))
 
             # Prepare filename for title
-            base_filename = os.path.basename(file_path)  # <<< Get filename
+            base_filename = os.path.basename(file_path)
 
             ax.clear()
             ax.plot(times, y_ds)
             ax.set_xlabel("Time (s)")
             ax.set_ylabel("Amplitude")
-            # --- Modified Line ---
-            ax.set_title(base_filename)  # <<< Use filename for title
-            # --- End Modification ---
+            ax.set_title(base_filename)
 
         except Exception as e:
             # Log the error but allow the calling UI to handle it if necessary

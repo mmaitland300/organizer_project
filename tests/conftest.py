@@ -23,9 +23,7 @@ except ImportError:
 
 # Import the DatabaseManager class (ensure path is correct)
 from services.database_manager import DatabaseManager
-
-# --- ADD Import for table object ---
-from services.schema import files_table  # <<< Import your table object
+from services.schema import files_table
 
 # --- Configuration ---
 TEST_DATABASE_URL = "sqlite:///:memory:"

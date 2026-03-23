@@ -10,9 +10,9 @@ from typing import Any, Dict, List
 
 # Import necessary components from settings
 try:
-    from config.settings import BPM_REGEX  # <<< Import the new BPM_REGEX
     from config.settings import (
         _FOLDER_IGNORE_RE,
+        BPM_REGEX,
         ENABLE_FILENAME_TAGGING,
         ENABLE_FOLDER_TAGGING,
         FILENAME_TAG_PATTERNS,
@@ -21,7 +21,6 @@ try:
         KEY_REGEX,
     )
 
-    # from services.analysis_engine import AnalysisEngine # Keep commented if not used
 except ImportError:
     logging.critical("Failed to import settings for AutoTagService!", exc_info=True)
     # Define minimal fallbacks
@@ -179,7 +178,7 @@ class AutoTagService:
                     file_info["key"] = final_key_upper
                     modified = True
 
-        # --- 2. Filename-Based BPM Extraction --- ### NEW SECTION ###
+        # --- 2. Filename-Based BPM Extraction ---
         if (
             BPM_REGEX and file_info.get("bpm") is None
         ):  # Only extract if BPM isn't already set
@@ -203,7 +202,7 @@ class AutoTagService:
                         f"Could not convert potential BPM match '{bpm_match.group('bpm')}' to int in {filename}"
                     )
 
-        # --- 3. Filename-Based Tag Extraction --- (Renumbered)
+        # --- 3. Filename-Based Tag Extraction ---
         if ENABLE_FILENAME_TAGGING:
             for dimension, pattern in FILENAME_TAG_PATTERNS:
                 dim_tags = tags.setdefault(dimension, [])
@@ -216,7 +215,6 @@ class AutoTagService:
                             tag_value, str
                         )  # Assert type *after* checking not None
                         tag_value_norm = tag_value.lower().replace("-", " ")
-                    # tag_value_norm = tag_value.lower().replace("-", " ") # This line seems redundant/incorrectly placed - removed
                     if tag_value_norm not in dim_tags:
                         logger.debug(
                             f"Adding filename tag '{tag_value_norm}' to dimension '{dimension}' for: {filename}"
@@ -224,7 +222,7 @@ class AutoTagService:
                         dim_tags.append(tag_value_norm)
                         modified = True
 
-        # --- 4. Folder-Based Tag Extraction --- (Renumbered)
+        # --- 4. Folder-Based Tag Extraction ---
         if ENABLE_FOLDER_TAGGING:
             try:
                 folder_path = os.path.dirname(path)

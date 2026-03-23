@@ -16,15 +16,12 @@ from typing import Any, Dict, List, Optional
 from PyQt5 import QtCore
 
 # --- Application Imports ---
-# Import only necessary items from settings
 from config.settings import (
     AUDIO_EXTENSIONS,
     TinyTag,
 )
 from services.cache_manager import CacheManager
 from services.database_manager import DatabaseManager
-
-# Keep helpers import for key detection (if kept) and potentially hash (if added later)
 from utils.helpers import detect_key_from_filename
 
 logger = logging.getLogger(__name__)
@@ -51,7 +48,7 @@ class FileScannerService(QtCore.QThread):
     def __init__(
         self,
         root_path: str,
-        db_manager: DatabaseManager,  # <<< Accept db_manager instance
+        db_manager: DatabaseManager,
         parent: Optional[QtCore.QObject] = None,
     ) -> None:
         """
@@ -59,7 +56,7 @@ class FileScannerService(QtCore.QThread):
 
         Args:
             root_path: The absolute path to the directory to scan.
-            db_manager: The DatabaseManager instance to use. # <<< Updated docstring
+            db_manager: The DatabaseManager instance to use.
             parent: Optional parent QObject.
         """
         super().__init__(parent)
@@ -70,18 +67,14 @@ class FileScannerService(QtCore.QThread):
         self.root_path = root_path
         self._cancelled = False
 
-        # --- Use the passed-in db_manager ---
-        self.db = db_manager  # <<< Store the passed instance
-        if (
-            not self.db or not self.db.engine
-        ):  # Check if valid manager/engine was passed
+        self.db = db_manager
+        if not self.db or not self.db.engine:
             logger.error(
                 "FileScannerService initialized without a valid DatabaseManager/engine."
             )
             raise ConnectionError("Database manager is not properly initialized.")
-        # --- End Modification ---
 
-        # Initialize cache manager (keep existing logic)
+        # Initialize cache manager
         try:
             self.cache_manager = CacheManager()
         except Exception as e:
@@ -265,8 +258,6 @@ class FileScannerService(QtCore.QThread):
                             file_info["key"] = detected_key
                     except Exception as key_e:
                         logger.warning(f"Key detection error {full_path}: {key_e}")
-
-                    # --- BPM DETECTION IS NO LONGER HERE ---
 
                     files_info.append(file_info)
                     to_save_in_db.append(file_info)

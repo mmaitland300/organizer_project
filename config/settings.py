@@ -213,16 +213,12 @@ ALL_SAVABLE_COLUMNS = (
     + ["bit_depth", "loudness_lufs", "pitch_hz", "attack_time"]
 )
 
-# ADD Database Configuration
-# Use environment variable or default
 DEFAULT_DB_PATH = os.path.expanduser("~/.musicians_organizer.db")
 DB_PATH = os.environ.get("MUSICORG_DB_PATH", DEFAULT_DB_PATH)
 DB_URL = f"sqlite:///{DB_PATH}"
 
 STATS_CACHE_FILENAME = os.path.expanduser("~/.musicians_organizer_stats.json")
-# END Database Configuration
 
-# ADD Engine Factory Function
 _engine_instance: Optional[Engine] = None
 
 

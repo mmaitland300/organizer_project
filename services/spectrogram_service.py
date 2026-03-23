@@ -1,5 +1,4 @@
 # Filename: services/spectrogram_service.py
-# New File
 
 import functools
 import logging
@@ -91,7 +90,7 @@ class SpectrogramService:
             f"Computing spectrogram for: {os.path.basename(file_path)} with params: n_fft={n_fft}, hop={hop_length}, win={win_length}, window='{window}'"
         )
         results: Dict[str, Any] = {
-            "y": None,  # <<< ADDED: To store loaded audio
+            "y": None,
             "magnitude": None,
             "power": None,
             "mel": None,
@@ -117,7 +116,7 @@ class SpectrogramService:
                 dtype=np.float32,
             )
             results["sr"] = sr
-            results["y"] = y  # Store loaded audio
+            results["y"] = y
 
             # Compute Short-Time Fourier Transform (STFT)
             S_complex = librosa.stft(

@@ -5,8 +5,8 @@ from collections import OrderedDict
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from PyQt5 import QtCore  # Ensure QtCore is imported
-from PyQt5.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot  # Import pyqtSlot
+from PyQt5 import QtCore
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal, pyqtSlot
 
 from config.settings import AUDIO_EXTENSIONS
 from services.advanced_analysis_worker import AdvancedAnalysisWorker
@@ -36,26 +36,21 @@ class ScanController(QObject):
     error = pyqtSignal(str)
     stateChanged = pyqtSignal(object)
 
-    # --- MODIFY: Update __init__ ---
-    def __init__(
-        self, db_manager: DatabaseManager, parent: QObject = None
-    ) -> None:  # <<< Accept db_manager
+    def __init__(self, db_manager: DatabaseManager, parent: QObject = None) -> None:
         super().__init__(parent)
         self._scanner: Optional[FileScannerService] = None
         self.state = ControllerState.Idle
-        self.db_manager = db_manager  # <<< Store db_manager
+        self.db_manager = db_manager
 
     def start_scan(self, folder: str, bpm_detection: bool = False) -> None:
         """
         Begin scanning the given folder asynchronously.
         """
-        # --- ADD check for db_manager ---
         if not self.db_manager or not self.db_manager.engine:
             err_msg = "DatabaseManager not initialized in ScanController."
             logger.error(err_msg)
             self.error.emit(err_msg)
             return
-        # --- End check --
         try:
             if self._scanner and self._scanner.isRunning():
                 logger.warning(
@@ -64,37 +59,29 @@ class ScanController(QObject):
                 self.cancel()  # Ensure previous is stopped if somehow still running
                 # Potentially add a short wait or check state before proceeding
 
-            # --- MODIFY: Pass db_manager to FileScannerService ---
-            self._scanner = FileScannerService(
-                folder, db_manager=self.db_manager
-            )  # <<< Pass stored db_manager
-            # --- End Modification ---
+            self._scanner = FileScannerService(folder, db_manager=self.db_manager)
 
             self._scanner.progress.connect(self.progress)
             self._scanner.finished.connect(self._on_finished)
-            # Switch to Running state
             self.state = ControllerState.Running
             self.stateChanged.emit(self.state)
             self.started.emit()
-            QTimer.singleShot(
-                0, self._scanner.start
-            )  # Keep using QTimer for async start
+            QTimer.singleShot(0, self._scanner.start)
         except Exception as e:
             logger.error(f"Scan start failed: {e}", exc_info=True)
-            self.state = ControllerState.Idle  # Reset state on error
+            self.state = ControllerState.Idle
             self.stateChanged.emit(self.state)
-            self.error.emit(f"Scan start failed: {e}")  # Emit error signal
+            self.error.emit(f"Scan start failed: {e}")
 
     def cancel(self) -> None:
         """
         Cancel an ongoing scan.
         """
-        # --- Corrected cancel logic based on your previous code ---
         if self._scanner and self._scanner.isRunning():
             try:
                 logger.info("ScanController: Requesting scanner cancellation.")
                 self.state = ControllerState.Cancelling
-                self.stateChanged.emit(self.state)  # Emit cancelling state
+                self.stateChanged.emit(self.state)
                 self._scanner.cancel()
                 # Don't wait indefinitely here, _on_finished will handle state reset
                 # self._scanner.wait(100) # Avoid long waits in controller slot
@@ -114,7 +101,6 @@ class ScanController(QObject):
         """
         Handler invoked when scanning completes or is cancelled.
         """
-        # --- Corrected finished logic based on your previous code ---
         logger.debug(
             f"ScanController received finished signal. Current state: {self.state}"
         )
@@ -188,9 +174,7 @@ class DuplicatesController(QObject):
         """
         Handler invoked when duplicate detection completes.
         """
-        logger.debug(
-            f"{self.__class__.__name__} task finished. Setting state to Idle."
-        )  # Added log
+        logger.debug(f"{self.__class__.__name__} task finished. Setting state to Idle.")
         self.state = ControllerState.Idle
         self.stateChanged.emit(self.state)
         self.finished.emit(duplicate_groups)
@@ -232,13 +216,11 @@ class AnalysisController(QObject):
 
         self._was_cancelled = False  # Reset cancellation flag
         try:
-            # Create the worker instance
             self._worker = AdvancedAnalysisWorker(
                 files_info, db_manager=self.db_manager
             )
 
             # --- Connect Signals ---
-            # Connect worker's data/progress/error signals to controller's signals
             self._worker.progress.connect(self.progress)
             self._worker.error.connect(self.error)
 
@@ -246,9 +228,7 @@ class AnalysisController(QObject):
             self._worker.analysisComplete.connect(self._on_worker_data_finished)
 
             # Connect the *built-in* QThread.finished signal for cleanup (no arguments)
-            self._worker.finished.connect(
-                self._on_worker_thread_finished
-            )  # Built-in signal
+            self._worker.finished.connect(self._on_worker_thread_finished)
             self._worker.error.connect(
                 self._on_worker_thread_finished
             )  # Cleanup on error too
@@ -256,7 +236,6 @@ class AnalysisController(QObject):
             # Automatically delete the QThread object once its run() has completed
             self._worker.finished.connect(self._worker.deleteLater)
 
-            # Update state and start thread
             self.state = ControllerState.Running
             self.stateChanged.emit(self.state)
             self.started.emit()
@@ -299,7 +278,6 @@ class AnalysisController(QObject):
     def _on_worker_data_finished(self, updated_files: List[Dict[str, Any]]) -> None:
         """Handles the data results when the worker's run method completes."""
         logger.debug("AnalysisController received worker data finished signal.")
-        # Emit the final data onwards
         self.analysis_data_finished.emit(updated_files)
         logger.debug("AnalysisController analysis_data_finished signal emitted.")
 
