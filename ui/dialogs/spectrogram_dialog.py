@@ -1,6 +1,3 @@
-# Filename: ui/dialogs/spectrogram_dialog.py
-# New File
-
 import logging
 import os
 from typing import Optional

@@ -16,7 +16,6 @@ if MOCK_LIBS or "librosa" not in sys.modules:
     sys.modules["librosa.feature"] = mock.MagicMock(spec=["melspectrogram"])
 if MOCK_LIBS or "numpy" not in sys.modules:
     sys.modules["numpy"] = mock.MagicMock(spec=["abs", "array", "float32"])
-    # Mock common numpy functions/attributes if needed by the service directly
     sys.modules["numpy"].abs = mock.MagicMock(
         side_effect=lambda x: (
             np.core.umath.absolute(x) if isinstance(x, np.ndarray) else abs(x)

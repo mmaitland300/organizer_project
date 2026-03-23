@@ -39,7 +39,6 @@ def sample_files():
 
 @pytest.fixture
 def proxy_model(sample_files, db_manager: DatabaseManager):
-    # Pass db_manager correctly using keyword arguments for clarity
     table = FileTableModel(db_manager=db_manager, files=sample_files, size_unit="KB")
     proxy = FileFilterProxyModel()
     proxy.setSourceModel(table)
@@ -114,12 +113,9 @@ def test_pitch_filter(proxy_model, sample_files, min_pitch, max_pitch, expected_
     ],
 )
 def test_attack_time_filter(proxy_model, sample_files, min_ms, max_ms, expected_ids):
-    # --- FIX: Call setter directly with ms values ---
-    # The setter method expects milliseconds and converts them internally.
+    # The setter expects milliseconds and converts internally.
     proxy_model.set_filter_attack_time_range(min_ms, max_ms)
-    # --- End Fix ---
 
-    # --- Keep result extraction and assertion ---
     ids = []
     for i in range(proxy_model.rowCount()):
         source_index = proxy_model.mapToSource(proxy_model.index(i, 0))

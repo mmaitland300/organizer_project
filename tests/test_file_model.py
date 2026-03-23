@@ -11,11 +11,7 @@ import pytest
 from PyQt5.QtCore import QModelIndex, Qt
 
 from models.file_model import FileFilterProxyModel, FileTableModel
-
-# Import the db_manager fixture type hint if needed for model init
 from services.database_manager import DatabaseManager
-
-# Assuming conftest.py provides db_manager fixture
 
 # --- Sample Data (From User's File) ---
 SAMPLE_FILE_INFO_LIST: List[Dict[str, Any]] = [
@@ -112,7 +108,6 @@ def test_setData_edit(file_model: FileTableModel):
 @pytest.fixture
 def filter_proxy_model(db_manager: DatabaseManager) -> FileFilterProxyModel:
     """Fixture for FileFilterProxyModel, using SAMPLE_FILE_INFO_LIST for defaults."""
-    # Needs a source model, which needs a db_manager
     filter_test_data = [
         {"path": "/dummy/path/sample1.wav", "used": False, "size": 100},
         {"path": "/dummy/path/sample2.wav", "used": True, "size": 200},
@@ -375,12 +370,10 @@ def run_advanced_filter(proxy_model, db_manager, query, file_info_list):
         base_copy.update(item)
         populated_file_info.append(base_copy)
 
-    # Instantiate real source model - requires db_manager fixture
     source_model = FileTableModel(
-        db_manager=db_manager,  # Pass db_manager using keyword
-        files=populated_file_info,  # Pass files using keyword
-        size_unit="KB",  # Pass size_unit using keyword
-        # parent=None                   # Optional parent
+        db_manager=db_manager,
+        files=populated_file_info,
+        size_unit="KB",
     )
 
     # Set the real source model on the proxy
@@ -408,7 +401,6 @@ def test_adv_filter_simple_term(adv_proxy_model, db_manager):
         {"path": "/s/Kickstart My Heart.mp3", "tags": {}},
     ]
     expected = [True, False, True, True]
-    # Pass db_manager to helper
     assert run_advanced_filter(adv_proxy_model, db_manager, query, files) == expected
 
 

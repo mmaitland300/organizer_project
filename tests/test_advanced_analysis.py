@@ -15,7 +15,7 @@ from PyQt5.QtCore import QEventLoop, QTimer
 from PyQt5.QtTest import QSignalSpy
 from PyQt5.QtWidgets import QApplication
 
-from services.advanced_analysis_worker import (  # Import the real worker function for type checking if needed
+from services.advanced_analysis_worker import (
     AdvancedAnalysisWorker,
     _analyze_file_process_worker,
 )
@@ -94,7 +94,6 @@ def test_parallel_analysis_and_db_save(
     mock_aliased_submit.side_effect = mock_submit_side_effect
     # ----------------------------------------------------
 
-    # Keep file list setup
     files: List[Dict[str, Any]] = [
         {
             "path": "/dummy/audio1.wav",
@@ -139,7 +138,6 @@ def test_parallel_analysis_and_db_save(
     spy_finished = QSignalSpy(worker.analysisComplete)
     spy_progress = QSignalSpy(worker.progress)
 
-    # Keep QEventLoop and Timeout logic
     loop = QEventLoop()
     worker.analysisComplete.connect(loop.quit)
     worker.error.connect(loop.quit)
@@ -198,7 +196,6 @@ def test_parallel_analysis_and_db_save(
     assert "/dummy/audio_error.mp3" not in saved_paths
     assert "/dummy/audio_no_features.aiff" not in saved_paths
 
-    # (Keep checks on saved_list content)
     for record in saved_list:
         assert "brightness" in record
         if record["path"] == "/dummy/audio1.wav":

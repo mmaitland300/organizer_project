@@ -5,10 +5,6 @@ from sqlalchemy import Engine, text  # Import Engine for type hint
 
 from config.settings import ALL_SAVABLE_COLUMNS
 
-# Import the test_engine fixture if you need it directly,
-# or just rely on the db_manager fixture which uses it.
-# from .conftest import test_engine # Example import if needed directly
-
 
 def test_db_columns_match_constants(
     test_engine: Engine,
