@@ -1,6 +1,3 @@
-# Filename: services/spectrogram_plotter.py
-# Updated with refined theme application for better readability
-
 import logging
 import os
 from typing import Any, Optional

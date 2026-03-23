@@ -1,5 +1,3 @@
-# Filename: services/spectrogram_service.py
-
 import functools
 import logging
 import os
