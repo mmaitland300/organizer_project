@@ -1,5 +1,4 @@
 # Filename: tests/test_spectrogram_service.py
-# With corrected test_file_not_found
 
 import os
 import sys  # Import sys for module checking
@@ -82,7 +81,6 @@ class TestSpectrogramService(unittest.TestCase):
         self, mock_melspectrogram, mock_stft, mock_load, mock_exists
     ):
         """Test successful spectrogram calculation and result structure."""
-        # --- (This test method remains unchanged from the previous correct version) ---
         mock_exists.return_value = True
         mock_sr = 44100
         mock_y = np.array([0.1, 0.2, 0.1, -0.1, -0.2], dtype=np.float32)
@@ -117,7 +115,6 @@ class TestSpectrogramService(unittest.TestCase):
     @mock.patch("services.spectrogram_service.librosa.feature.melspectrogram")
     def test_caching(self, mock_melspectrogram, mock_stft, mock_load, mock_exists):
         """Test that results are cached and internal librosa calls happen only once."""
-        # --- (This test method remains unchanged from the previous correct version) ---
         mock_exists.return_value = True
         mock_sr = 44100
         mock_y = np.array([0.1] * 100, dtype=np.float32)
@@ -146,7 +143,6 @@ class TestSpectrogramService(unittest.TestCase):
     )
     def test_parameter_override(self, mock_compute):
         """Test that overridden parameters are passed to the compute method."""
-        # --- (This test method remains unchanged from the previous correct version) ---
         mock_compute.return_value = {"error": None}
         override_params = {"n_fft": 1024, "hop_length": 256, "window": "hamming"}
         # Explicitly pass load_duration=None or its default value
@@ -164,7 +160,6 @@ class TestSpectrogramService(unittest.TestCase):
             load_duration=default_load_duration,  # Check correct load_duration was passed
         )
 
-    # --- CORRECTED test_file_not_found ---
     @mock.patch("services.spectrogram_service.os.path.exists")
     @mock.patch("services.spectrogram_service.librosa.load")
     def test_file_not_found(self, mock_load, mock_exists):
@@ -186,14 +181,11 @@ class TestSpectrogramService(unittest.TestCase):
         self.assertIn("Audio file not found", result["error"])
         self.assertIn(DUMMY_ABS_PATH, result["error"])
 
-    # --- END CORRECTED test_file_not_found ---
-
     @mock.patch("services.spectrogram_service.os.path.exists")
     @mock.patch("services.spectrogram_service.librosa.load")
     @mock.patch("services.spectrogram_service.librosa.stft")
     def test_calculation_error(self, mock_stft, mock_load, mock_exists):
         """Test handling of errors during librosa calculation."""
-        # --- (This test method remains unchanged from the previous correct version) ---
         mock_exists.return_value = True
         mock_load.return_value = (np.array([0.1], dtype=np.float32), 44100)
         mock_stft.side_effect = ValueError("Test STFT Error")
@@ -207,7 +199,6 @@ class TestSpectrogramService(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    # --- (This __main__ block remains unchanged) ---
     import sys
 
     if "numpy" not in sys.modules:

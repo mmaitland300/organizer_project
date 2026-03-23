@@ -12,7 +12,7 @@ from services.database_manager import DatabaseManager
 from ui.controllers import AnalysisController, ControllerState
 
 
-# --- Mock Fixture for DB Manager (Keep as is) ---
+# --- Mock Fixture for DB Manager ---
 @pytest.fixture
 def mock_db_manager():
     """Mock the DatabaseManager"""
@@ -21,14 +21,10 @@ def mock_db_manager():
     return mock
 
 
-# --- REMOVED MockAnalysisWorker class definition ---
-# The custom class is no longer needed with the standard patch approach.
-
-
 # --- Test Function (Using standard patch, no new_callable) ---
 
 
-# MODIFIED: Standard patch without new_callable. Decorator injects a mock CLASS.
+# Standard patch without new_callable. Decorator injects a mock CLASS.
 @patch("ui.controllers.AdvancedAnalysisWorker")
 # Test signature receives the MagicMock CLASS from the patch decorator, and db_manager fixture.
 def test_analysis_controller_signal_connections(MockWorkerClass, mock_db_manager):

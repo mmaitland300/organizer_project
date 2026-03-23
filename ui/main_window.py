@@ -4,9 +4,7 @@ import logging
 import os
 import shutil
 import time
-
-# Import Enum if ControllerState is used (it is)
-from enum import Enum  # Ensure this is imported
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore, QtGui, QtWidgets
@@ -24,14 +22,10 @@ from PyQt5.QtWidgets import (
 )
 from send2trash import send2trash
 
-from config.settings import AUDIO_EXTENSIONS  # Keep for checks if needed
-
-# Models, Services, Utils, Config, Dialogs, Controllers...
+from config.settings import AUDIO_EXTENSIONS
 from models.file_model import FileFilterProxyModel, FileTableModel
 from services.auto_tagger import AutoTagService
 from services.database_manager import DatabaseManager
-
-# Import Controllers and State Enum
 from ui.controllers import (
     AnalysisController,
     ControllerState,
@@ -39,9 +33,7 @@ from ui.controllers import (
     ScanController,
 )
 from ui.dialogs.duplicate_manager_dialog import DuplicateManagerDialog
-
-# Import dialogs used
-from ui.dialogs.feature_view_dialog import FeatureViewDialog  # Import the new dialog
+from ui.dialogs.feature_view_dialog import FeatureViewDialog
 from ui.dialogs.multi_dim_tag_editor_dialog import MultiDimTagEditorDialog
 from ui.dialogs.spectrogram_dialog import SpectrogramDialog
 from ui.dialogs.waveform_dialog import WaveformDialog
@@ -60,7 +52,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-# --- New Similarity Results Dialog ---
+# --- Similarity Results Dialog ---
 class SimilarityResultsDialog(QDialog):
     """
     A simple dialog to display similarity search results.
@@ -114,14 +106,14 @@ class SimilarityResultsDialog(QDialog):
         self.setLayout(layout)
 
 
-# --- New Worker Thread for Statistics ---
+# --- Worker Thread for Statistics ---
 class StatsWorker(QtCore.QThread):
     """Worker thread to calculate feature statistics in the background."""
 
     finished = QtCore.pyqtSignal(bool, str)  # Signal: success(bool), message(str)
     # No progress signal needed for now, could be added if stats calc is chunked
 
-    def __init__(self, db_manager: DatabaseManager, parent=None):  # Accept db_manager
+    def __init__(self, db_manager: DatabaseManager, parent=None):
         super().__init__(parent)
         self.db_manager = db_manager
 
@@ -130,10 +122,9 @@ class StatsWorker(QtCore.QThread):
         logger.info("StatsWorker thread run() method entered.")
         message = "Statistics updated successfully."
         success = False
-        stats = None  # Initialize stats variable
+        stats = None
 
         try:
-            # --- ADD specific try...except around the DB call ---
             try:
                 logger.info(
                     "StatsWorker: Calling get_feature_statistics(refresh=True)..."
@@ -154,8 +145,6 @@ class StatsWorker(QtCore.QThread):
                 stats = (
                     None  # Ensure stats is None so subsequent check fails gracefully
                 )
-            # --- END specific try...except ---
-
             # Check the result *after* the call attempt
             # This part only runs if the DB call didn't raise an exception caught above
             if stats is not None:
@@ -177,10 +166,7 @@ class StatsWorker(QtCore.QThread):
             logger.info(
                 f"StatsWorker thread run() finished. Emitting finished signal (success={success})."
             )
-            # Emit the signal to trigger onStatsWorkerFinished in MainWindow
             self.finished.emit(success, message)
-
-    # --- End modified run method ---
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -189,10 +175,9 @@ class MainWindow(QtWidgets.QMainWindow):
     tasks and provides enhanced filtering capabilities.
     """
 
-    # --- MODIFY __init__ ---
-    def __init__(self, db_manager: DatabaseManager) -> None:  # Accept db_manager
+    def __init__(self, db_manager: DatabaseManager) -> None:
         super().__init__()
-        self.db_manager = db_manager  # Store the instance
+        self.db_manager = db_manager
         self.setWindowTitle("Musicians Organizer")
         self.resize(1000, 700)
         self.all_files_info: List[Dict[str, Any]] = []
@@ -202,18 +187,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.theme: str = "light"  # Initialize theme attribute
 
         # --- Controllers ---
-        self.scan_ctrl = ScanController(
-            db_manager=self.db_manager, parent=self
-        )  # <<< Pass db_manager
+        self.scan_ctrl = ScanController(db_manager=self.db_manager, parent=self)
         self.dup_ctrl = DuplicatesController(self)
-        self.anal_ctrl = AnalysisController(
-            db_manager=self.db_manager, parent=self
-        )  # <<< Pass db_manager
+        self.anal_ctrl = AnalysisController(db_manager=self.db_manager, parent=self)
         self.stats_worker: Optional[StatsWorker] = None
 
-        # --- ADD Explicit State Flag ---
         self._is_calculating_stats: bool = False
-        # --- END State Flag ---
 
         # --- Media Player ---
         self.player: Optional[Any] = None
@@ -223,7 +202,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # --- Initialize UI Elements (Models will be created in initUI) ---
         self.model: Optional[FileTableModel] = None
         self.proxyModel: Optional[FileFilterProxyModel] = None
-        # Add placeholders for UI elements created in initUI for type hinting if desired
         self.comboKeyFilter: Optional[QtWidgets.QComboBox] = None
         self.spinBpmMin: Optional[QtWidgets.QSpinBox] = None
         self.spinBpmMax: Optional[QtWidgets.QSpinBox] = None
@@ -266,13 +244,12 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # --- Toolbars (Keep existing toolbar code as is) ---
+        # --- Toolbars ---
         # File Management Toolbar
         self.fileToolBar = QtWidgets.QToolBar("File Management", self)
         self.fileToolBar.setObjectName("fileToolBar")
         self.fileToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.fileToolBar)
-        # ... (Add actions: actSelectFolder, actFindDuplicates, etc.) ...
         self.actSelectFolder = QtWidgets.QAction("Select Folder", self)
         self.actSelectFolder.setObjectName("actSelectFolder")
         self.actSelectFolder.triggered.connect(self.selectFolder)
@@ -313,7 +290,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.audioToolBar.setObjectName("audioToolBar")
         self.audioToolBar.setMovable(False)
         self.addToolBar(QtCore.Qt.TopToolBarArea, self.audioToolBar)
-        # ... (Add actions: actPreview, actStopPreview, actWaveform, actWaveformPlayer, actAutoTag, actEditTags, actAnalyzeLibrary, actViewFeatures, actRecommend, actSendToCubase) ...
         actPreview = QtWidgets.QAction("Preview", self)
         actPreview.triggered.connect(self.previewSelected)
         self.audioToolBar.addAction(actPreview)
@@ -324,7 +300,6 @@ class MainWindow(QtWidgets.QMainWindow):
         actWaveform = QtWidgets.QAction("Waveform", self)
         actWaveform.triggered.connect(self.waveformPreview)
         self.audioToolBar.addAction(actWaveform)
-        # --- ADD Spectrogram Action ---
         actViewSpectrogram = QtWidgets.QAction("Spectrogram", self)
         actViewSpectrogram.setObjectName("actViewSpectrogram")
         actViewSpectrogram.triggered.connect(self.viewSpectrogram)
@@ -354,8 +329,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actRecommend.setObjectName("actRecommend")
         self.actRecommend.triggered.connect(self.recommendSimilarSamples)
         self.audioToolBar.addAction(self.actRecommend)
-        # Store reference if needed for _update_ui_state
-        self.actViewSpectrogram = actViewSpectrogram  # Optional: store reference
+        self.actViewSpectrogram = actViewSpectrogram
         actSendToCubase = QtWidgets.QAction("Send to Cubase", self)
         actSendToCubase.triggered.connect(self.sendToCubase)
         self.audioToolBar.addAction(actSendToCubase)
@@ -375,9 +349,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Filename Filter
         lblFilter = QtWidgets.QLabel("Name Contains:", filter_group_box)
         self.txtFilter = QtWidgets.QLineEdit(filter_group_box)
-        self.txtFilter.setPlaceholderText(
-            "E.g., kick AND tag:loop NOT name:perc..."
-        )  # Updated hint
+        self.txtFilter.setPlaceholderText("E.g., kick AND tag:loop NOT name:perc...")
         filter_layout.addWidget(lblFilter)
         filter_layout.addWidget(self.txtFilter)
 
@@ -437,8 +409,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.spinBpmMax.setRange(0, 500)
         self.spinBpmMax.setSuffix(" Max")
         self.spinBpmMax.setSpecialValueText("Any")
-        # Default max BPM higher than min initially
-        self.spinBpmMax.setValue(500)  # Set initial max high
+        self.spinBpmMax.setValue(500)
         bpm_layout.addWidget(self.spinBpmMin)
         bpm_layout.addWidget(self.spinBpmMax)
         filter_layout.addWidget(lblBpmFilter)
@@ -451,8 +422,7 @@ class MainWindow(QtWidgets.QMainWindow):
         filter_layout.addWidget(lblTagTextFilter)
         filter_layout.addWidget(self.txtTagTextFilter)
 
-        # --- Add NEW Feature Filters ---
-        # Separator before new filters
+        # --- Feature Filters ---
         line_features = QtWidgets.QFrame(filter_group_box)
         line_features.setFrameShape(QtWidgets.QFrame.HLine)
         line_features.setFrameShadow(QtWidgets.QFrame.Sunken)
@@ -466,19 +436,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lufs_min_spinbox.setDecimals(1)
         self.lufs_min_spinbox.setSingleStep(0.5)
         self.lufs_min_spinbox.setSuffix(" Min")
-        self.lufs_min_spinbox.setSpecialValueText("Any")  # Use special value text
-        self.lufs_min_spinbox.setValue(
-            self.lufs_min_spinbox.minimum()
-        )  # Default to min
+        self.lufs_min_spinbox.setSpecialValueText("Any")
+        self.lufs_min_spinbox.setValue(self.lufs_min_spinbox.minimum())
         self.lufs_max_spinbox = QtWidgets.QDoubleSpinBox(filter_group_box)
         self.lufs_max_spinbox.setRange(-70.0, 0.0)
         self.lufs_max_spinbox.setDecimals(1)
         self.lufs_max_spinbox.setSingleStep(0.5)
         self.lufs_max_spinbox.setSuffix(" Max")
-        self.lufs_max_spinbox.setSpecialValueText("Any")  # Use special value text
-        self.lufs_max_spinbox.setValue(
-            self.lufs_max_spinbox.maximum()
-        )  # Default to max
+        self.lufs_max_spinbox.setSpecialValueText("Any")
+        self.lufs_max_spinbox.setValue(self.lufs_max_spinbox.maximum())
         lufs_layout.addWidget(self.lufs_min_spinbox)
         lufs_layout.addWidget(self.lufs_max_spinbox)
         filter_layout.addWidget(lblLufsFilter)
@@ -487,10 +453,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Bit Depth Filter
         lblBitDepthFilter = QtWidgets.QLabel("Bit Depth:", filter_group_box)
         self.bit_depth_combobox = QtWidgets.QComboBox(filter_group_box)
-        # Add common bit depths, ensure "Any" is first
-        self.bit_depth_combobox.addItems(
-            ["Any", "16", "24", "32", "8"]
-        )  # Order as desired
+        self.bit_depth_combobox.addItems(["Any", "16", "24", "32", "8"])
         filter_layout.addWidget(lblBitDepthFilter)
         filter_layout.addWidget(self.bit_depth_combobox)
 
@@ -570,13 +533,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         splitter.addWidget(left_panel)
 
-        # --- Right Panel (Table View - Keep existing setup) ---
+        # --- Right Panel (Table View) ---
         right_panel = QtWidgets.QWidget(self)
         right_layout = QtWidgets.QVBoxLayout(right_panel)
         right_layout.setContentsMargins(8, 8, 8, 8)
         right_layout.setSpacing(5)
 
-        # Create models (use the corrected FileTableModel from previous step)
         self.model = FileTableModel(
             db_manager=self.db_manager, files=[], size_unit=self.size_unit
         )
@@ -585,7 +547,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.tableView = QtWidgets.QTableView(self)
         self.tableView.setModel(self.proxyModel)
-        # ... (keep existing tableView settings: sorting, selection, headers, etc.) ...
         self.tableView.setSortingEnabled(True)
         self.tableView.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.tableView.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
@@ -593,19 +554,17 @@ class MainWindow(QtWidgets.QMainWindow):
             lambda: self._update_ui_state()
         )
         self.tableView.verticalHeader().setVisible(False)
-        self.tableView.horizontalHeader().setStretchLastSection(
-            True
-        )  # Keep last column (Tags) stretching
+        self.tableView.horizontalHeader().setStretchLastSection(True)
 
         right_layout.addWidget(self.tableView)
         self.labelSummary = QtWidgets.QLabel("Scanned 0 files.", self)
         right_layout.addWidget(self.labelSummary)
         splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 1)  # Adjust stretch factor if needed (Left panel)
-        splitter.setStretchFactor(1, 3)  # Adjust stretch factor if needed (Right panel)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
         main_layout.addWidget(splitter)
 
-        # --- Status Bar and Menu Bar (Keep existing setup) ---
+        # --- Status Bar and Menu Bar ---
         self.setStatusBar(QtWidgets.QStatusBar(self))
         menuBar = self.menuBar()
         helpMenu = menuBar.addMenu("Help")
@@ -625,14 +584,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.txtFilter.textChanged.connect(self._start_name_filter_timer)
         self.chkOnlyUnused.stateChanged.connect(self.on_unused_filter_changed)
         self.comboSizeUnit.currentIndexChanged.connect(self.on_size_unit_changed)
-        self.comboKeyFilter.activated[str].connect(
-            self.proxyModel.set_filter_key
-        )  # Direct connect
-        self.spinBpmMin.valueChanged.connect(self._update_bpm_filter)  # Use helper slot
-        self.spinBpmMax.valueChanged.connect(self._update_bpm_filter)  # Use helper slot
+        self.comboKeyFilter.activated[str].connect(self.proxyModel.set_filter_key)
+        self.spinBpmMin.valueChanged.connect(self._update_bpm_filter)
+        self.spinBpmMax.valueChanged.connect(self._update_bpm_filter)
         self.txtTagTextFilter.textChanged.connect(self._start_tag_text_filter_timer)
 
-        # --- Connect NEW Feature Filter Signals ---
+        # --- Connect Feature Filter Signals ---
         self.lufs_min_spinbox.valueChanged[float].connect(self._update_lufs_filter)
         self.lufs_max_spinbox.valueChanged[float].connect(self._update_lufs_filter)
         self.bit_depth_combobox.activated[str].connect(self._update_bit_depth_filter)
@@ -643,8 +600,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.attack_max_spinbox.valueChanged.connect(self._update_attack_time_filter)
 
         # --- Connect Debounce Timers ---
-        # --- MODIFICATION: Ensure nameFilterTimer timeout connects to the correct slot ---
-        # This slot now calls set_advanced_filter instead of set_filter_name
         self.nameFilterTimer.timeout.connect(self.on_name_filter_apply)
 
         self.tagFilterTimer.timeout.connect(self.on_tag_text_filter_apply)
@@ -656,18 +611,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """Connects signals from controller instances to MainWindow slots."""
         # Scan Controller
         self.scan_ctrl.started.connect(lambda: self.on_task_started("Scan"))
-        self.scan_ctrl.progress.connect(
-            self.on_scan_progress
-        )  # Use specific progress slot
+        self.scan_ctrl.progress.connect(self.on_scan_progress)
         self.scan_ctrl.finished.connect(self.onScanFinished)
         self.scan_ctrl.error.connect(self.on_task_error)
         self.scan_ctrl.stateChanged.connect(self.on_controller_state_changed)
 
         # Duplicates Controller
         self.dup_ctrl.started.connect(lambda: self.on_task_started("Duplicates"))
-        self.dup_ctrl.progress.connect(
-            self.on_duplicate_progress
-        )  # Use specific progress slot
+        self.dup_ctrl.progress.connect(self.on_duplicate_progress)
         self.dup_ctrl.finished.connect(self.onDuplicatesFound)
         self.dup_ctrl.error.connect(self.on_task_error)
         self.dup_ctrl.stateChanged.connect(self.on_controller_state_changed)
@@ -676,9 +627,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.anal_ctrl.started.connect(lambda: self.on_task_started("Analysis"))
         self.anal_ctrl.progress.connect(self.on_advanced_analysis_progress)
 
-        self.anal_ctrl.analysis_data_finished.connect(
-            self.onAdvancedAnalysisFinished
-        )  # New signal name
+        self.anal_ctrl.analysis_data_finished.connect(self.onAdvancedAnalysisFinished)
         self.anal_ctrl.error.connect(self.on_task_error)
         self.anal_ctrl.stateChanged.connect(self.on_controller_state_changed)
 
@@ -814,7 +763,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
 
         # Delete from filesystem and DB
-        db = self.db_manager  #  Use stored instance
+        db = self.db_manager
         for path in paths_to_delete_fs:
             try:
                 if self.chkRecycleBin.isChecked():
@@ -891,8 +840,6 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
 
-    # stopPreview implemented above
-
     def waveformPreview(self) -> None:
         path = self.getSelectedFilePath()
         if path and path.lower().endswith(tuple(AUDIO_EXTENSIONS)):
@@ -938,7 +885,6 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             QtWidgets.QMessageBox.information(self, "No Selection", "No file selected.")
 
-    # --- ADD Slot for View Spectrogram Action ---
     @pyqtSlot()
     def viewSpectrogram(self) -> None:
         """Handles the 'View Spectrogram' action."""
@@ -978,9 +924,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def autoTagFiles(self) -> None:
         """Applies auto-tagging (currently key from filename) to all loaded files."""
 
-        if (
-            self.is_any_task_busy()
-        ):  # Assuming is_any_task_busy helper exists as defined before
+        if self.is_any_task_busy():
             QMessageBox.warning(
                 self, "Auto Tag", "Cannot tag files while another task is running."
             )
@@ -994,7 +938,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         logger.info("Starting auto-tagging...")
         updated_count = 0
-        db = self.db_manager  # <<< Use stored instance
+        db = self.db_manager
         files_to_save: List[Dict[str, Any]] = []
         for file_info in self.all_files_info:
             # Apply auto-tagging in-place and get a flag if anything changed
@@ -1090,7 +1034,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Ensure stats are loaded/calculated (find_similar_files handles this internally now)
             # db_manager.get_feature_statistics() # No longer needed to call explicitly here
 
-            db_manager = self.db_manager  # <<< Use stored instance
+            db_manager = self.db_manager
             similar_files = db_manager.find_similar_files(
                 reference_file_id=reference_id, num_results=num_results_to_fetch
             )
@@ -1167,7 +1111,6 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             return
 
-        # +++ START DEBUG LOGGING +++
         logger.debug("--- Retrieved file_info for FeatureViewDialog ---")
         # Log a few key standard and advanced features to check their presence/values
         log_features = [
@@ -1186,8 +1129,6 @@ class MainWindow(QtWidgets.QMainWindow):
         logger.debug(f"Data subset: {logged_data}")
         # Optionally log all keys to see what's available:
         # logger.debug(f"All keys in file_info: {list(file_info.keys())}")
-        # +++ END DEBUG LOGGING +++
-
         # 3. Check if features likely exist (e.g., check one feature)
         # This assumes analysis has been run. A better check might be needed.
         if (
@@ -1277,7 +1218,7 @@ class MainWindow(QtWidgets.QMainWindow):
         filter_text = self.txtFilter.text()
         logger.debug(f"Applying name filter: '{filter_text}'")
 
-        self.proxyModel.set_advanced_filter(filter_text)  # Changed from set_filter_name
+        self.proxyModel.set_advanced_filter(filter_text)
 
     @pyqtSlot()
     def on_tag_text_filter_apply(self) -> None:
@@ -1328,7 +1269,6 @@ class MainWindow(QtWidgets.QMainWindow):
             f"{task_name} started..."
         )  # Give specific feedback
 
-    # Modify on_controller_state_changed to log WHICH controller changed
     @pyqtSlot(object)
     def on_controller_state_changed(self, state: ControllerState) -> None:
         """Handles state changes from Scan, Duplicates, Analysis controllers."""
@@ -1368,7 +1308,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Also reset progress bar and potentially re-enable buttons via state change
         self.progressBar.setValue(0)
         self.statusBar().showMessage("An error occurred.", 5000)
-        self._update_ui_state()  # NEW - Correct call to helper
+        self._update_ui_state()
 
     @pyqtSlot(int, int)
     def on_scan_progress(self, current: int, total: int) -> None:
@@ -1472,7 +1412,6 @@ class MainWindow(QtWidgets.QMainWindow):
         the analysis task was NOT cancelled.
         """
         logger.info("Advanced analysis finished signal received.")
-        # Import the master list of feature keys
         try:
             from config.settings import ALL_FEATURE_KEYS
         except ImportError:
@@ -1518,7 +1457,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progressBar.setValue(100)
         self.all_files_info = updated_files  # Assign results
 
-        # +++ START Ensure Keys Exist +++
         logger.debug(
             "Ensuring all feature keys exist in successfully completed analysis results..."
         )
@@ -1538,7 +1476,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 f"Added {missing_keys_added_count} missing feature keys with None value for consistency."
             )
         logger.debug("Key consistency check complete.")
-        # +++ END Ensure Keys Exist +++
 
         # 1) Update UI with the *consistent* analysis results
         self.model.updateData(self.all_files_info)  # Update model AFTER ensuring keys
@@ -1550,7 +1487,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "Main model updated after analysis and key check. Preparing stats worker."
         )
 
-        # --- Start StatsWorker (rest of the code remains the same) ---
+        # --- Start StatsWorker ---
         if self._is_calculating_stats and (
             not self.stats_worker or not self.stats_worker.isRunning()
         ):
@@ -1579,9 +1516,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         logger.info("Creating and starting StatsWorker thread for statistics refresh.")
-        self.stats_worker = StatsWorker(
-            db_manager=self.db_manager, parent=self
-        )  # <<< Pass db_manager
+        self.stats_worker = StatsWorker(db_manager=self.db_manager, parent=self)
         self.stats_worker.finished.connect(self.onStatsWorkerFinished)
         self._is_calculating_stats = True
         logger.debug("_is_calculating_stats set to True.")
@@ -1766,7 +1701,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.dup_ctrl.cancel()
                 if self.anal_ctrl.state != ControllerState.Idle:
                     self.anal_ctrl.cancel()
-                # *** REMOVED explicit wait() loop ***
                 # Rely on controller/worker cleanup via signals and context managers
                 logger.info("Cancellation requested for running tasks.")
 
@@ -1831,22 +1765,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self, "actRecommend", self.findChild(QtWidgets.QAction, "Recommend")
         )
         view_features_action = getattr(self, "actViewFeatures", None)
-        delete_action = self.findChild(
-            QtWidgets.QAction, "actDeleteSelected"
-        )  # Adjust name if needed
-        edit_tags_action = self.findChild(
-            QtWidgets.QAction, "actEditTags"
-        )  # Adjust name if needed
-        preview_action = self.findChild(
-            QtWidgets.QAction, "actPreview"
-        )  # Adjust name if needed
-        send_cubase_action = self.findChild(
-            QtWidgets.QAction, "actSendToCubase"
-        )  # Adjust name if needed
+        delete_action = self.findChild(QtWidgets.QAction, "actDeleteSelected")
+        edit_tags_action = self.findChild(QtWidgets.QAction, "actEditTags")
+        preview_action = self.findChild(QtWidgets.QAction, "actPreview")
+        send_cubase_action = self.findChild(QtWidgets.QAction, "actSendToCubase")
 
-        view_spectrogram_action = getattr(
-            self, "actViewSpectrogram", None
-        )  # Get new action
+        view_spectrogram_action = getattr(self, "actViewSpectrogram", None)
 
         # --- Set Enabled States ---
         select_folder_action.setEnabled(not is_controller_busy)
@@ -1905,7 +1829,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     logger.warning(f"Error checking feature existence for tooltip: {e}")
             view_features_action.setToolTip(tooltip)
 
-        # Stop Button State (unchanged)
+        # Stop Button State
         is_task_cancellable = (
             self.scan_ctrl.state == ControllerState.Running
             or self.dup_ctrl.state == ControllerState.Running
@@ -1914,7 +1838,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if stop_action:
             stop_action.setEnabled(is_task_cancellable or is_player_active)
 
-        # --- Status Bar Update (refined logic from previous step) ---
+        # --- Status Bar Update ---
         status = "Ready."
         timeout = 3000
         if is_scan_busy:
@@ -1951,7 +1875,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # If already showing permanent 'Ready.', don't flash it temporarily
             pass
 
-    # --- Helper Methods to Update NEW Feature Filters ---
+    # --- Feature Filter Helpers ---
 
     @pyqtSlot()
     def _update_lufs_filter(self) -> None:
@@ -2064,8 +1988,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # Pass values in ms to the setter (it handles conversion to seconds)
         self.proxyModel.set_filter_attack_time_range(min_ms, max_ms)
 
-    # --- Keep existing helper methods like _update_bpm_filter ---
-    # Make sure _update_bpm_filter also uses specialValueText if you updated the spinboxes
     def _update_bpm_filter(self):
         """Reads min/max BPM spinboxes and updates the proxy model."""
         if hasattr(self, "spinBpmMin") and hasattr(self, "spinBpmMax"):
@@ -2091,7 +2013,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if save:
             self.saveSettings()
 
-    # onStatsWorkerFinished (incorporating flag and previous robustness)
     @pyqtSlot(bool, str)
     def onStatsWorkerFinished(self, success: bool, message: str):
         """Handles the finished signal from the StatsWorker thread."""
@@ -2134,7 +2055,6 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
     def applyLightThemeStylesheet(self) -> None:
-        # Stylesheet content from previous response
         self.setStyleSheet(
             """
             QMainWindow { background-color: #ffffff; color: #000000; }
@@ -2150,7 +2070,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QComboBox { background-color: #ffffff; border: 1px solid #cccccc;
                 color: #333333; border-radius: 4px; padding: 4px; min-height: 1.5em;}
             QComboBox::drop-down { border: none; }
-            QComboBox::down-arrow { image: url(:/qt-project.org/styles/commonstyle/images/standardbutton-down-arrow-16.png); } /* Adjust path if needed */
+            QComboBox::down-arrow { image: url(:/qt-project.org/styles/commonstyle/images/standardbutton-down-arrow-16.png); }
             QSpinBox { background-color: #ffffff; border: 1px solid #cccccc; padding: 3px;
                 color: #333333; border-radius: 4px;}
             QTableView { background-color: #ffffff; alternate-background-color: #f9f9f9;
@@ -2174,7 +2094,6 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
     def applyDarkThemeStylesheet(self) -> None:
-        # Stylesheet content from previous response
         self.setStyleSheet(
             """
             QMainWindow { background-color: #282c34; color: #abb2bf; }
@@ -2185,15 +2104,15 @@ class MainWindow(QtWidgets.QMainWindow):
             QToolBar QToolButton:pressed { background-color: #4b5263; }
             QToolBar::separator { height: 16px; background: #3a3f4b; width: 1px; margin: 4px 4px; }
             QLabel, QCheckBox, QRadioButton { color: #abb2bf; font-size: 13px; }
-            QCheckBox::indicator { width: 13px; height: 13px; } /* Optional: Adjust checkbox size */
+            QCheckBox::indicator { width: 13px; height: 13px; }
             QCheckBox::indicator:unchecked { border: 1px solid #5c6370; background-color: #3a3f4b; border-radius: 3px;}
-            QCheckBox::indicator:checked { border: 1px solid #61afef; background-color: #61afef; image: url(:/qt-project.org/styles/commonstyle/images/checkbox-checked-16.png); } /* Adjust path/image */
+            QCheckBox::indicator:checked { border: 1px solid #61afef; background-color: #61afef; image: url(:/qt-project.org/styles/commonstyle/images/checkbox-checked-16.png); }
             QLineEdit { background-color: #3a3f4b; border: 1px solid #4b5263;
                 color: #abb2bf; border-radius: 4px; padding: 4px; }
             QComboBox { background-color: #3a3f4b; border: 1px solid #4b5263;
                 color: #abb2bf; border-radius: 4px; padding: 4px; min-height: 1.5em;}
             QComboBox::drop-down { border: none; }
-            QComboBox::down-arrow { image: url(:/qt-project.org/styles/commonstyle/images/standardbutton-down-arrow-16.png); } /* Adjust path if needed */
+            QComboBox::down-arrow { image: url(:/qt-project.org/styles/commonstyle/images/standardbutton-down-arrow-16.png); }
             QComboBox QAbstractItemView { background-color: #3a3f4b; border: 1px solid #4b5263; selection-background-color: #61afef; color: #abb2bf; }
             QSpinBox { background-color: #3a3f4b; border: 1px solid #4b5263; padding: 3px;
                 color: #abb2bf; border-radius: 4px;}
@@ -2228,6 +2147,5 @@ class MainWindow(QtWidgets.QMainWindow):
             "6. Stop: Use 'Stop' action to halt playback or background tasks.\n"
             "7. Analyze: Use 'Analyze Library' to compute advanced features.\n"
             "8. Delete: Use 'Delete Selected' action (uses Recycle Bin if checked).\n"
-            # Add more details as features grow
         )
         QtWidgets.QMessageBox.information(self, "Usage Help", help_text)

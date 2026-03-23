@@ -38,13 +38,9 @@ def sample_files():
 
 
 @pytest.fixture
-def proxy_model(
-    sample_files, db_manager: DatabaseManager
-):  # <<< ADD db_manager fixture injection
+def proxy_model(sample_files, db_manager: DatabaseManager):
     # Pass db_manager correctly using keyword arguments for clarity
-    table = FileTableModel(
-        db_manager=db_manager, files=sample_files, size_unit="KB"
-    )  # <<< CORRECTED CALL
+    table = FileTableModel(db_manager=db_manager, files=sample_files, size_unit="KB")
     proxy = FileFilterProxyModel()
     proxy.setSourceModel(table)
     return proxy
@@ -107,9 +103,7 @@ def test_pitch_filter(proxy_model, sample_files, min_pitch, max_pitch, expected_
 @pytest.mark.parametrize(
     "min_ms,max_ms,expected_ids",
     [
-        # --- CORRECTED EXPECTED IDS for first case ---
         (5, None, [1, 2]),  # File 1 (5ms) AND File 2 (10ms) are >= 5ms
-        # ---------------------------------------------
         (None, 7, [1]),  # Only File 1 (5ms) is <= 7ms
         (5, 10, [1, 2]),  # File 1 (5ms) AND File 2 (10ms) are >= 5ms AND <= 10ms
         (

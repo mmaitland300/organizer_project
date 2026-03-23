@@ -10,7 +10,6 @@ from config.settings import ALL_SAVABLE_COLUMNS
 # from .conftest import test_engine # Example import if needed directly
 
 
-# MODIFY: Use the test_engine fixture provided by conftest.py
 def test_db_columns_match_constants(
     test_engine: Engine,
 ):  # Inject the test_engine fixture
@@ -34,11 +33,10 @@ def test_db_columns_match_constants(
         assert False, f"Failed to query PRAGMA table_info(files): {e}"
 
     # --- Define the expected set of columns ---
-    # --- MODIFY THIS LINE ---
     expected = set(ALL_SAVABLE_COLUMNS) | {
         "id",
         "last_scanned",
-    }  # <<< ADD "last_scanned" HERE
+    }
 
     # Perform the assertion
     assert (

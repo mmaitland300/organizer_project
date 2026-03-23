@@ -1,5 +1,5 @@
 # FILE: services/schema.py
-import logging  # Add logging
+import logging
 
 from sqlalchemy import (
     TIMESTAMP,
@@ -36,7 +36,7 @@ except ImportError:
     ALL_FEATURE_KEYS = _ORIGINAL_FALLBACK + ADDITIONAL_FEATURE_KEYS
 
 
-# Naming convention for constraints/indexes (keep as is)
+# Naming convention for constraints/indexes
 convention = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -62,14 +62,14 @@ files_table = Table(
     Column("channels", Integer, nullable=True),
     Column("tags", Text, default="{}"),  # Store JSON as Text
     Column("last_scanned", TIMESTAMP, server_default=func.now(), onupdate=func.now()),
-    # --- Add ALL feature columns based on settings ---
+    # --- Feature columns from settings ---
     # This assumes ALL_FEATURE_KEYS contains both original and new keys
     *(
         Column(feature, Float, nullable=True)
         for feature in ALL_FEATURE_KEYS
         if feature not in ["bit_depth"]
     ),  # Exclude bit_depth as it's Integer
-    # --- Explicitly define non-Float or already defined new columns ---
+    # --- Non-Float column definitions ---
     Column("bit_depth", Integer, nullable=True),  # Define explicitly as Integer
     # --- Constraints ---
     UniqueConstraint(

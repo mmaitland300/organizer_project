@@ -1,4 +1,3 @@
-# migrations/env.py
 import logging
 import os
 import sys
@@ -12,7 +11,7 @@ from sqlalchemy import engine_from_config, pool
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-    print(f"Added project root to sys.path: {PROJECT_ROOT}")  # Optional: confirm path
+    print(f"Added project root to sys.path: {PROJECT_ROOT}")
 
 # --- Alembic Config ---
 config = context.config
@@ -23,12 +22,10 @@ if config.config_file_name is not None:
 
 # Setup basic logging if fileConfig fails or is not used
 logger = logging.getLogger("alembic.env")
-# logger.setLevel(logging.INFO) # Adjust level as needed
+# logger.setLevel(logging.INFO)
 
 # --- Target Metadata ---
-# Import the MetaData object from your application's schema definition
 try:
-    # --->>> Ensure this import path 'services.schema' is correct <<<---
     from services.schema import metadata as target_metadata
 
     logger.info("Successfully imported target_metadata from services.schema")
@@ -56,12 +53,12 @@ def run_migrations_offline() -> None:
     logger.info(f"Running offline migrations with URL: {url}")
     context.configure(
         url=url,
-        target_metadata=target_metadata,  # Use imported metadata
+        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
-        render_as_batch=True,  # <<< Enable batch mode for offline too
+        render_as_batch=True,
     )
 
     logger.info("Beginning offline migration transaction.")

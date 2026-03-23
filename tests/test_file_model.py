@@ -3,12 +3,12 @@
 # Includes tests for Advanced Search functionality
 
 import datetime
-import os  # <<< Added import
+import os
 from typing import Any, Dict, List
-from unittest.mock import MagicMock  # <<< Added import
+from unittest.mock import MagicMock
 
 import pytest
-from PyQt5.QtCore import QModelIndex, Qt  # <<< Added QModelIndex
+from PyQt5.QtCore import QModelIndex, Qt
 
 from models.file_model import FileFilterProxyModel, FileTableModel
 
@@ -45,7 +45,7 @@ SAMPLE_FILE_INFO_LIST: List[Dict[str, Any]] = [
 ]
 
 
-# --- Fixture for FileTableModel (Existing - Unchanged) ---
+# --- Fixture for FileTableModel ---
 @pytest.fixture
 def file_model(db_manager: DatabaseManager) -> FileTableModel:
     """Creates a FileTableModel instance with sample data and db_manager"""
@@ -56,7 +56,7 @@ def file_model(db_manager: DatabaseManager) -> FileTableModel:
     return model
 
 
-# --- Test Functions for FileTableModel (Existing - Unchanged) ---
+# --- Test Functions for FileTableModel ---
 
 
 def test_row_column_count(file_model: FileTableModel):
@@ -108,7 +108,7 @@ def test_setData_edit(file_model: FileTableModel):
 # --- Test Functions for FileFilterProxyModel ---
 
 
-# --- Fixture for FileFilterProxyModel (Existing - Slightly Modified) ---
+# --- Fixture for FileFilterProxyModel ---
 @pytest.fixture
 def filter_proxy_model(db_manager: DatabaseManager) -> FileFilterProxyModel:
     """Fixture for FileFilterProxyModel, using SAMPLE_FILE_INFO_LIST for defaults."""
@@ -132,7 +132,7 @@ def filter_proxy_model(db_manager: DatabaseManager) -> FileFilterProxyModel:
     return proxy
 
 
-# --- Existing Test for FileFilterProxyModel (Unchanged) ---
+# --- Test for FileFilterProxyModel ---
 def test_filter_only_unused(filter_proxy_model: FileFilterProxyModel):
     """Test filtering for unused files."""
     filter_proxy_model.set_filter_unused(True)
@@ -360,7 +360,6 @@ def test_parse_advanced_query(adv_proxy_model, query_string, expected_structure)
 # --- Tests for filterAcceptsRow with Advanced Queries (NEW) ---
 
 
-# Helper function MODIFIED
 def run_advanced_filter(proxy_model, db_manager, query, file_info_list):
     """
     Sets filter, creates REAL source model, and runs filterAcceptsRow.
@@ -385,7 +384,7 @@ def run_advanced_filter(proxy_model, db_manager, query, file_info_list):
     )
 
     # Set the real source model on the proxy
-    proxy_model.setSourceModel(source_model)  # <<< Uses real model now
+    proxy_model.setSourceModel(source_model)
 
     # Set the advanced query string (which gets parsed internally)
     proxy_model.set_advanced_filter(query)
@@ -398,8 +397,8 @@ def run_advanced_filter(proxy_model, db_manager, query, file_info_list):
     return results
 
 
-# Test Cases for filterAcceptsRow (Calls Modified, db_manager added)
-def test_adv_filter_simple_term(adv_proxy_model, db_manager):  # <<< Added db_manager
+# Test Cases for filterAcceptsRow
+def test_adv_filter_simple_term(adv_proxy_model, db_manager):
     """Test filtering with a single default term (name/tag)."""
     query = "kick"
     files = [
@@ -413,9 +412,7 @@ def test_adv_filter_simple_term(adv_proxy_model, db_manager):  # <<< Added db_ma
     assert run_advanced_filter(adv_proxy_model, db_manager, query, files) == expected
 
 
-def test_adv_filter_quoted_term(
-    adv_proxy_model, db_manager
-):  # <<< Added db_manager if needed by helper
+def test_adv_filter_quoted_term(adv_proxy_model, db_manager):
     """Test filtering with a quoted term (searches for exact substring)."""
     query = '"hi hat"'
     files = [
@@ -430,16 +427,12 @@ def test_adv_filter_quoted_term(
         },  # Does NOT contain exact phrase "hi hat"
         {"path": "/s/ride_cymbal.wav", "tags": {}},  # No match
     ]
-    # --- MODIFICATION: Corrected expected result ---
     # File 3 should NOT match because "hi hat" is not a contiguous substring
     expected = [True, True, False, False]
-    # --- END MODIFICATION ---
     assert run_advanced_filter(adv_proxy_model, db_manager, query, files) == expected
 
 
-def test_adv_filter_field_specifier(
-    adv_proxy_model, db_manager
-):  # <<< Added db_manager
+def test_adv_filter_field_specifier(adv_proxy_model, db_manager):
     """Test filtering with field specifiers (name:, tag:, key:)."""
     query = "name:loop tag:ambient key:Am"
     files = [
@@ -461,7 +454,7 @@ def test_adv_filter_field_specifier(
     assert run_advanced_filter(adv_proxy_model, db_manager, query, files) == expected
 
 
-def test_adv_filter_boolean_logic(adv_proxy_model, db_manager):  # <<< Added db_manager
+def test_adv_filter_boolean_logic(adv_proxy_model, db_manager):
     """Test filtering with AND, OR, NOT operators."""
     query = "kick OR snare AND NOT name:acoustic"
     files = [
@@ -476,9 +469,7 @@ def test_adv_filter_boolean_logic(adv_proxy_model, db_manager):  # <<< Added db_
     assert run_advanced_filter(adv_proxy_model, db_manager, query, files) == expected
 
 
-def test_adv_filter_tag_field_logic(
-    adv_proxy_model, db_manager
-):  # <<< Added db_manager
+def test_adv_filter_tag_field_logic(adv_proxy_model, db_manager):
     """Test tag: field specifier searches all tag values."""
     query = "tag:loop"
     files = [
@@ -495,9 +486,7 @@ def test_adv_filter_tag_field_logic(
     assert run_advanced_filter(adv_proxy_model, db_manager, query, files) == expected
 
 
-def test_adv_filter_combined_with_other_filters(
-    adv_proxy_model, db_manager
-):  # <<< Added db_manager
+def test_adv_filter_combined_with_other_filters(adv_proxy_model, db_manager):
     """Test interaction between advanced query and other standard filters."""
     adv_proxy_model.set_filter_key("Dm")
     query = "tag:bass OR name:sub"
@@ -512,5 +501,5 @@ def test_adv_filter_combined_with_other_filters(
 
 
 # ============================================================
-# == END NEW/MODIFIED TESTS                                ==
+# == END TESTS FOR ADVANCED SEARCH FUNCTIONALITY           ==
 # ============================================================

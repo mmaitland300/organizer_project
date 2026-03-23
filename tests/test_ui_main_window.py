@@ -1,5 +1,4 @@
 # FILE: tests/test_ui_main_window.py
-# Refactored to use pytest fixtures, corrected qtbot import path
 
 import os
 import sys
@@ -9,7 +8,6 @@ import pytest  # Import pytest
 # Import necessary types for hints
 from PyQt5.QtWidgets import QApplication
 
-# --- CORRECTED IMPORT ---
 # Import QtBot class using the actual filename 'qtbot.py' found in site-packages
 from pytestqt.qtbot import QtBot  # For type hinting the fixture
 

@@ -8,8 +8,6 @@ import time
 # Import Future for mocking submit return value
 from concurrent.futures import Future
 from typing import Any, Dict, List, Optional
-
-# Added Future import, removed ANY as it's less needed now
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -33,7 +31,6 @@ def mock_analyze_process_worker_side_effect(
     """
     Mocks the return value of _analyze_file_process_worker based on path.
     Returns the *updated* file_info dict or None.
-    (Implementation unchanged from previous step)
     """
     path = file_info.get("path")
     logger.debug(f"Mock analyzing (process worker side effect): {path}")
@@ -63,15 +60,15 @@ def mock_analyze_process_worker_side_effect(
 
 # --- Pytest Test Functions ---
 
-# --- Test Function (MODIFIED Patch Target) ---
+# --- Test Function ---
 
 
 @patch.object(DatabaseManager, "save_file_records")
-# MODIFIED: Patch the 'submit' method using the alias path '_cf'
+# Patch the 'submit' method using the alias path '_cf'
 @patch("services.advanced_analysis_worker._cf.ProcessPoolExecutor.submit")
 # Test function signature includes the mock for the aliased path
 def test_parallel_analysis_and_db_save(
-    mock_aliased_submit,  # <<< Mock for _cf.ProcessPoolExecutor.submit
+    mock_aliased_submit,
     mock_save_records,
     db_manager: DatabaseManager,
 ):
@@ -88,7 +85,7 @@ def test_parallel_analysis_and_db_save(
         mock_cancel_event = MagicMock()
         logger.debug(f"Mock aliased submit called for: {file_info.get('path')}")
         result = mock_analyze_process_worker_side_effect(file_info, mock_cancel_event)
-        mock_future: Future = Future()  # <<< Added type hint
+        mock_future: Future = Future()
         mock_future.set_result(result)
         submitted_futures.append(mock_future)
         return mock_future
@@ -180,7 +177,6 @@ def test_parallel_analysis_and_db_save(
     ), "Finished list has incorrect number of files"
 
     # --- Assertions on Finished Data ---
-    # (Keep existing assertions - unchanged)
     results_dict = {f["path"]: f for f in finished_list}
     assert "/dummy/audio1.wav" in results_dict
     assert results_dict["/dummy/audio1.wav"].get("brightness") == pytest.approx(1000.0)
@@ -191,7 +187,6 @@ def test_parallel_analysis_and_db_save(
     assert results_dict["/dummy/audio_no_features.aiff"].get("brightness") is None
 
     # --- Assert DB Save ---
-    # (Keep existing assertions - unchanged)
     assert mock_save_records.call_count == 1, "save_file_records should be called once"
     saved_list = mock_save_records.call_args[0][0]
     assert isinstance(saved_list, list)
@@ -222,7 +217,7 @@ def test_cancellation(mock_submit, mock_save_records, db_manager: DatabaseManage
         logger.debug(f"Mock submit called (cancel test): {file_info.get('path')}")
         # Simulate analysis result (doesn't really matter as worker should cancel)
         result = None  # Or copy(file_info)
-        mock_future: Future = Future()  # <<< Added type hint
+        mock_future: Future = Future()
         mock_future.set_result(result)
         # Don't sleep here, let the main worker loop handle timing/cancellation
         return mock_future

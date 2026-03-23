@@ -12,16 +12,13 @@ import os
 import threading
 from typing import Any, Dict, List, Optional
 
-# ---> Add SQLAlchemy imports <---
 from sqlalchemy import delete, select, text
 
 # Import specific dialect construct for ON CONFLICT
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Engine, Row  # For type hinting
 
-from config.settings import ALL_FEATURE_KEYS  # Import the list of features
-
-# Import your table definition
+from config.settings import ALL_FEATURE_KEYS
 from services.schema import files_table
 
 logger = logging.getLogger(__name__)
@@ -48,9 +45,8 @@ ALL_SAVABLE_COLUMNS = (
     + ALL_FEATURE_KEYS
     + ["bit_depth", "loudness_lufs", "pitch_hz", "attack_time"]
 )
-# --- New Constant for Stats Cache ---
+# --- Stats Cache Constant ---
 STATS_CACHE_FILENAME = os.path.expanduser("~/.musicians_organizer_stats.json")
-# --- End New Constant ---
 
 
 class DatabaseManager:
@@ -59,15 +55,14 @@ class DatabaseManager:
     including new audio feature columns.
     """
 
-    # --- MODIFY __init__ to accept engine ---
-    def __init__(self, engine: Engine):  # Accept engine as argument
+    def __init__(self, engine: Engine):
         """
         Initializes the DatabaseManager with a SQLAlchemy engine.
         """
         logger.debug("Initializing DatabaseManager attributes.")
         self._lock = threading.RLock()
         self._feature_stats: Optional[Dict[str, Dict[str, float]]] = None
-        self.engine: Engine = engine  # Store the passed-in engine
+        self.engine: Engine = engine
 
         # Ensure engine is not None after init (already checked by type hint, but safety)
         if self.engine is None:
@@ -269,7 +264,6 @@ class DatabaseManager:
             if params_list:
                 logger.error(f"First few params in failed batch: {params_list[:2]}")
 
-    # Keep _get_column_names - adapt to SQLAlchemy CursorResult if necessary
     def _get_column_names(self, cursor_result) -> List[str]:
         """Gets column names from the SQLAlchemy CursorResult keys."""
         # SQLAlchemy CursorResult has a .keys() method
@@ -500,8 +494,6 @@ class DatabaseManager:
             )
         return results
 
-    # Helper to get record by ID (used in find_similar_files example)
-    # --- REFACTORED ---
     def get_file_record_by_id(self, record_id: int) -> Optional[Dict[str, Any]]:
         """Fetch a single file record by primary key ID using SQLAlchemy Core."""
         if not self.engine:
@@ -536,7 +528,6 @@ class DatabaseManager:
             return None
 
     # --- Internal Statistics Calculation (Safe with RLock) ---
-    # --- REFACTORED ---
     def _calculate_feature_statistics(self) -> Dict[str, Dict[str, float]]:
         """
         Calculates feature statistics (count, mean, std dev) using SQL aggregates via SQLAlchemy Core.
@@ -715,7 +706,7 @@ class DatabaseManager:
         logger.debug("Lock RELEASED for load stats cache.")
         return stats
 
-    # --- REFACTORED Public Statistics Method ---
+    # --- Public Statistics Method ---
     def get_feature_statistics(
         self, refresh: bool = False
     ) -> Optional[Dict[str, Dict[str, float]]]:
@@ -788,8 +779,7 @@ class DatabaseManager:
         logger.debug("Lock RELEASED for final stats return.")
         return final_result
 
-    # --- Renamed Unscaled Similarity Method ---
-    # --- REFACTORED ---
+    # --- Unscaled Similarity Method ---
     def find_similar_files_unscaled(
         self, reference_file_id: int, num_results: int = 10
     ) -> List[Dict[str, Any]]:
@@ -814,7 +804,7 @@ class DatabaseManager:
                 logger.debug(
                     f"Lock ACQUIRED for find_similar_files_unscaled (SQLAlchemy): {reference_file_id}"
                 )
-                # 1. Get reference features (uses refactored get_file_record_by_id)
+                # 1. Get reference features
                 ref_dict = self.get_file_record_by_id(reference_file_id)
                 if not ref_dict:
                     return []
@@ -868,7 +858,7 @@ class DatabaseManager:
                 """
 
                 # 3. Execute using SQLAlchemy connection
-                similar_rows: List[Row[Any]] = []  # <<< Ensure Annotation exists
+                similar_rows: List[Row[Any]] = []
                 sim_col_names = []
                 with self.engine.connect() as connection:
                     cursor_result = connection.execute(text(sim_sql_str), params)
@@ -910,8 +900,7 @@ class DatabaseManager:
             )
             return []
 
-    # --- New Scaled Similarity Method ---
-    # --- REFACTORED ---
+    # --- Scaled Similarity Method ---
     def find_similar_files(
         self, reference_file_id: int, num_results: int = 10
     ) -> List[Dict[str, Any]]:
@@ -929,7 +918,7 @@ class DatabaseManager:
             f"Finding files similar to ID: {reference_file_id} (SCALED, SQLAlchemy)"
         )
 
-        # 1. Get Feature Statistics (No change needed here)
+        # 1. Get Feature Statistics
         stats = self.get_feature_statistics()
         if not stats:
             logger.error(
@@ -937,13 +926,13 @@ class DatabaseManager:
             )
             return []
 
-        # 2. Get Reference File Features (Uses refactored method)
+        # 2. Get Reference File Features
         ref_dict = self.get_file_record_by_id(reference_file_id)
         if not ref_dict:
             logger.error(f"Reference file ID {reference_file_id} not found.")
             return []
 
-        # 3. Scale Reference Features (No change needed here)
+        # 3. Scale Reference Features
         ref_features_scaled = {}
         valid_ref_features = True
         features_to_compare = ALL_FEATURE_KEYS
@@ -1024,7 +1013,7 @@ class DatabaseManager:
             logger.info("No suitable candidates found.")
             return []
 
-        # 5. Calculate Scaled Distances in Python (No change needed here)
+        # 5. Calculate Scaled Distances in Python
         results_with_distance = []
         for cand_dict in candidate_files_data:
             distance_sq_sum = 0.0
@@ -1059,7 +1048,7 @@ class DatabaseManager:
                     }
                 )
 
-        # 6. Sort Results and Return Top N (No change needed here)
+        # 6. Sort Results and Return Top N
         results_with_distance.sort(key=lambda x: x["distance"])  # type: ignore[arg-type, return-value]
         logger.info(
             f"Found {len(results_with_distance)} similar files. Returning top {num_results}."

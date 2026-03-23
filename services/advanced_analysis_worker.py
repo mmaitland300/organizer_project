@@ -7,7 +7,6 @@ cancellation. Emits progress before processing results for better UI update.
 Adjusted manager shutdown timing.
 """
 
-# --- (Keep all imports and the _analyze_file_process_worker function as before) ---
 from __future__ import annotations
 
 import concurrent.futures as _cf
@@ -36,14 +35,13 @@ except ImportError:
         ".flac",
         ".mp3",
         ".ogg",
-    }  # Keep audio ext fallback
+    }
     # Let ALL_FEATURE_KEYS fail import if settings missing
 
 logger = logging.getLogger(__name__)
 
 
 def _analyze_file_process_worker(file_info: Dict[str, Any], cancel_event: MPEvent) -> Optional[Dict[str, Any]]:  # type: ignore
-    # --- (Worker function code remains identical to the previous version) ---
     path = file_info.get("path", "Unknown Path")
     try:
         if cancel_event.is_set():
@@ -157,7 +155,7 @@ class AdvancedAnalysisWorker(QtCore.QThread):
                             )
                             run_cancelled = True
                             break
-                    # *** End Process Events Change ***
+
                     try:
                         updated_dict = future.result()
                         if updated_dict:
@@ -217,7 +215,6 @@ class AdvancedAnalysisWorker(QtCore.QThread):
             )  # Last log before exit
 
     def cancel(self) -> None:
-        # --- (Cancel method remains identical to previous version) ---
         logger.info("AdvancedAnalysisWorker cancellation requested.")
         with self._lock:
             if self._cancelled:

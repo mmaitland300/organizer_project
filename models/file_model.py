@@ -11,8 +11,8 @@ This module defines:
 import datetime
 import logging
 import os
-import re  # <<< Added for regex parsing
-from typing import (  # Use for type hinting only if needed to avoid circular imports at runtime
+import re
+from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
@@ -64,7 +64,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
         # Ensure internal assignment uses the correctly named argument
         self._files = files if files is not None else []
         self.size_unit = size_unit
-        self._db_manager = db_manager  # Make sure this uses the correct argument name
+        self._db_manager = db_manager
 
         # Use the statically defined headers
         self._column_count = len(self.COLUMN_HEADERS)
@@ -325,10 +325,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
                     )
                     return False
                 try:
-                    # MODIFY: Use stored instance variable
-                    self._db_manager.save_file_record(
-                        file_info
-                    )  # <<< Use instance variable
+                    self._db_manager.save_file_record(file_info)
                     logger.debug(
                         f"Saved changes for {file_info.get('path')} after edit (Column: {self.COLUMN_HEADERS[col]})."
                     )
@@ -345,7 +342,7 @@ class FileTableModel(QtCore.QAbstractTableModel):
             return False  # No change occurred
 
     def format_size(self, size_in_bytes: Optional[Union[int, float]]) -> str:
-        """Formats file size into KB, MB, or GB. (Keep existing implementation)"""
+        """Formats file size into KB, MB, or GB."""
         if size_in_bytes is None:
             return ""
         try:
@@ -432,7 +429,6 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
             {}
         )  # Specific tag filter (future use?)
         self._filter_tag_text: Optional[str] = None  # Simple tag text contains filter
-        # ADDED: State for parsed advanced query
         self._advanced_query_structure: Optional[List[Dict[str, Any]]] = None
 
         # --- New Feature Filters ---
@@ -444,7 +440,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         self._filter_attack_time_min: Optional[float] = None  # Stored in seconds
         self._filter_attack_time_max: Optional[float] = None  # Stored in seconds
 
-    # --- Advanced Search Parser (NEW) ---
+    # --- Advanced Search Parser ---
     def _parse_advanced_query(
         self, query_string: str
     ) -> Optional[List[Dict[str, Any]]]:
@@ -529,8 +525,6 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
                     fields = self._DEFAULT_SEARCH_FIELDS
                 term = value
             elif default_term:  # Default term (unquoted, no field)
-                # --- FIX: Prevent interpreting 'field:' as a term ---
-                # If the default term looks like an incomplete field specifier, ignore it.
                 if (
                     default_term.endswith(":")
                     and default_term[:-1].lower() in self._SUPPORTED_FIELDS
@@ -541,7 +535,6 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
                     term = None  # Do not treat as a term
                 else:
                     term = default_term
-                # --- END FIX ---
 
             # --- Add Condition to Structure ---
             # Ensure term is not None and not just whitespace after potential stripping
@@ -575,7 +568,6 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
 
     # --- Public Setter Methods ---
 
-    # ADDED: Setter for the advanced query
     def set_advanced_filter(self, query_string: Optional[str]) -> None:
         """Parses and sets the advanced text search query."""
         logger.debug(f"Received advanced query string: '{query_string}'")
@@ -591,7 +583,6 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
         else:
             logger.debug("Advanced query structure unchanged, skipping invalidation.")
 
-    # --- Keep other existing setters ---
     def set_filter_unused(self, enabled: bool) -> None:
         if self._filter_unused_only != enabled:
             self._filter_unused_only = enabled
@@ -668,7 +659,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
             logger.debug(f"Setting tag text filter: {self._filter_tag_text}")
             self.invalidateFilter()
 
-    # --- New Feature Filter Setters (Unchanged) ---
+    # --- New Feature Filter Setters ---
     def set_filter_lufs_range(
         self, min_lufs: Optional[float], max_lufs: Optional[float]
     ) -> None:
@@ -730,7 +721,7 @@ class FileFilterProxyModel(QtCore.QSortFilterProxyModel):
             logger.debug("Setting attack-time range: %s – %s", new_min, new_max)
             self.invalidateFilter()
 
-    # --- Helper for Advanced Query Evaluation (NEW) ---
+    # --- Helper for Advanced Query Evaluation ---
     def _check_condition(
         self, condition: Dict[str, Any], file_info: Dict[str, Any]
     ) -> bool:
