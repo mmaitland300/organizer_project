@@ -130,9 +130,9 @@ class StatsWorker(QtCore.QThread):
                     "StatsWorker: Calling get_feature_statistics(refresh=True)..."
                 )
                 # This is the potentially hanging/erroring call:
-                logger.debug("StatsWorker: >>> Entering DB stats calculation call.")
+                logger.debug("StatsWorker: entering DB stats calculation.")
                 stats = self.db_manager.get_feature_statistics(refresh=True)
-                logger.debug("StatsWorker: <<< Exited DB stats calculation call.")
+                logger.debug("StatsWorker: finished DB stats calculation.")
                 logger.info("StatsWorker: get_feature_statistics call completed.")
             except Exception as db_error:
                 # Log the specific error from the DB call

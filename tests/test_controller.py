@@ -1,8 +1,8 @@
 # tests/test_controller.py
-from unittest.mock import MagicMock, call, patch  # Keep necessary imports
+from unittest.mock import MagicMock, call, patch
 
 import pytest
-from PyQt5.QtCore import QObject, pyqtSignal  # Keep imports if needed elsewhere
+from PyQt5.QtCore import QObject, pyqtSignal
 
 # We no longer need to import AdvancedAnalysisWorker itself when only patching
 # from services.advanced_analysis_worker import AdvancedAnalysisWorker

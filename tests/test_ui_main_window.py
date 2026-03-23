@@ -18,11 +18,6 @@ from ui.main_window import MainWindow
 
 # Note: qtbot fixture handles QApplication instance, explicit import often not needed
 
-
-# Ensure platform is set correctly for headless environments if needed
-# pytest-qt generally handles this, but keep if required for your specific setup
-# os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 # --- Test Function using Pytest Fixtures ---
 
 
