@@ -75,6 +75,9 @@ python -m pip install -r requirements.txt
 python -m pip install -r requirements-dev.txt
 ```
 
+Installs use **pip and the requirement files only** (same as CI). `pyproject.toml`
+holds Black and isort settings; it is not a second install manifest or lockfile.
+
 4) Run the app:
 
 ```bash
