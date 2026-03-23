@@ -1,22 +1,10 @@
 # FILE: tests/test_ui_main_window.py
 
-import os
-import sys
+import pytest
+from pytestqt.qtbot import QtBot
 
-import pytest  # Import pytest
-
-# Import necessary types for hints
-from PyQt5.QtWidgets import QApplication
-
-# Import QtBot class using the actual filename 'qtbot.py' found in site-packages
-from pytestqt.qtbot import QtBot  # For type hinting the fixture
-
-from services.database_manager import DatabaseManager  # For type hint
-
-# Import code being tested
+from services.database_manager import DatabaseManager
 from ui.main_window import MainWindow
-
-# Note: qtbot fixture handles QApplication instance, explicit import often not needed
 
 # --- Test Function using Pytest Fixtures ---
 

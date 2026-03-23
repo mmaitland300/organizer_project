@@ -1,19 +1,13 @@
 import datetime
 import os
-import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 from PyQt5.QtTest import QSignalSpy
-from PyQt5.QtWidgets import QApplication
 
 from services.database_manager import DatabaseManager
 from services.file_scanner import FileScannerService
-
-# Ensure a QApplication instance is available.
-if QApplication.instance() is None:
-    app = QApplication(sys.argv)
 
 
 class TestFileScannerService(unittest.TestCase):

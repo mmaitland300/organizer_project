@@ -2,7 +2,6 @@
 
 import copy
 import logging
-import sys
 import time
 
 # Import Future for mocking submit return value
@@ -13,7 +12,6 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from PyQt5.QtCore import QEventLoop, QTimer
 from PyQt5.QtTest import QSignalSpy
-from PyQt5.QtWidgets import QApplication
 
 from services.advanced_analysis_worker import (
     AdvancedAnalysisWorker,
@@ -21,7 +19,6 @@ from services.advanced_analysis_worker import (
 )
 from services.database_manager import DatabaseManager
 
-app = QApplication.instance() or QApplication(sys.argv)
 logger = logging.getLogger(__name__)
 
 

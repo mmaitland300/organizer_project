@@ -1,14 +1,9 @@
 import datetime
-import sys
 import unittest
 
 from PyQt5.QtTest import QSignalSpy
-from PyQt5.QtWidgets import QApplication
 
 from services.duplicate_finder import DuplicateFinderService
-
-if QApplication.instance() is None:
-    app = QApplication(sys.argv)
 
 
 class TestDuplicateFinder(unittest.TestCase):

@@ -1,6 +1,10 @@
 # tests/conftest.py
-import logging
 import os
+
+# Before any Qt import (including via test module collection).
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import logging
 from typing import Generator  # Import Generator for type hint fix
 
 import pytest
@@ -32,6 +36,15 @@ ALEMBIC_INI_PATH = "alembic.ini"
 logger = logging.getLogger("pytest_db_setup")
 
 # --- Fixtures ---
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _qt_session_app_font(qapp):
+    """Single QApplication for the session (pytest-qt); match prior tests/__init__.py font."""
+    from PyQt5.QtGui import QFont
+
+    qapp.setFont(QFont("Arial", 10))
+    yield
 
 
 @pytest.fixture(scope="session")
