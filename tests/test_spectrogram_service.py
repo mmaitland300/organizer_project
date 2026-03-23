@@ -1,5 +1,3 @@
-# Filename: tests/test_spectrogram_service.py
-
 import os
 import sys  # Import sys for module checking
 import unittest
