@@ -103,7 +103,8 @@ class AnalysisEngine:
         """
         Calculates various audio features for the given file path.
 
-        Leverages SpectrogramService to get pre-computed spectrograms and raw audio data.
+        Leverages SpectrogramService to get pre-computed spectrograms and raw
+        audio data.
         Features requiring spectrograms (e.g., brightness, contrast, MFCCs) use the
         service's output. Features requiring raw audio (e.g., BPM, RMS, ZCR, pitch,
         attack, LUFS) use the 'y' array returned by the service. Bit depth uses
@@ -152,18 +153,20 @@ class AnalysisEngine:
                 the_service = spectrogram_service_instance
                 logger.debug("Using provided SpectrogramService instance.")
             else:
-                # Create internal instance; relies on static cached method within service
+                # Create internal instance; relies on static cached method.
                 the_service = SpectrogramService()
                 logger.debug("Created internal SpectrogramService instance.")
         except ImportError as e:
             logger.error(
-                f"Failed to instantiate SpectrogramService (missing dependencies?): {e}"
+                "Failed to instantiate SpectrogramService "
+                f"(missing dependencies?): {e}"
             )
             return {}
 
         # --- Get Spectrogram and Audio Data ---
         logger.debug(
-            f"Getting spectrogram data for first <= {max_duration}s of {os.path.basename(file_path)}"
+            "Getting spectrogram data for first <= "
+            f"{max_duration}s of {os.path.basename(file_path)}"
         )
         try:
             spec_data = the_service.get_spectrogram_data(
@@ -171,7 +174,8 @@ class AnalysisEngine:
             )
         except Exception as spec_e:
             logger.error(
-                f"Unexpected error calling get_spectrogram_data for {os.path.basename(file_path)}: {spec_e}",
+                "Unexpected error calling get_spectrogram_data for "
+                f"{os.path.basename(file_path)}: {spec_e}",
                 exc_info=True,
             )
             return {}  # Cannot proceed without data
@@ -179,12 +183,14 @@ class AnalysisEngine:
         # --- Validate Service Result ---
         if spec_data.get("error"):
             logger.error(
-                f"SpectrogramService failed for {os.path.basename(file_path)}: {spec_data['error']}"
+                "SpectrogramService failed for "
+                f"{os.path.basename(file_path)}: {spec_data['error']}"
             )
             return {}
         if not isinstance(spec_data.get("sr"), int) or spec_data.get("y") is None:
             logger.error(
-                f"SpectrogramService returned invalid data (missing sr or y) for {os.path.basename(file_path)}"
+                "SpectrogramService returned invalid data (missing sr or y) for "
+                f"{os.path.basename(file_path)}"
             )
             return {}
 
@@ -225,7 +231,8 @@ class AnalysisEngine:
                     )  # Filter non-finite values
                 else:
                     logger.warning(
-                        f"Magnitude spectrogram missing or empty for brightness: {basename}"
+                        "Magnitude spectrogram missing or empty for "
+                        f"brightness: {basename}"
                     )
             except Exception as e:
                 logger.warning(f"Brightness failed for {basename}: {e}", exc_info=False)
@@ -278,7 +285,8 @@ class AnalysisEngine:
                     )
                 else:
                     logger.warning(
-                        f"Magnitude spectrogram missing or empty for spectral contrast: {basename}"
+                        "Magnitude spectrogram missing or empty for "
+                        f"spectral contrast: {basename}"
                     )
             except Exception as e:
                 logger.warning(
@@ -292,7 +300,7 @@ class AnalysisEngine:
                 return {}
             try:
                 if S_mel is not None and S_mel.size > 0:
-                    # Convert Mel spectrogram to dB scale, which is typical input for MFCC
+                    # Convert Mel spectrogram to dB scale (typical input for MFCC).
                     S_mel_db = librosa.power_to_db(S_mel, ref=np.max)
                     mfccs = librosa.feature.mfcc(
                         S=S_mel_db, sr=sr, n_mfcc=n_mfcc_to_use
@@ -300,7 +308,7 @@ class AnalysisEngine:
                     # Check event again after potentially long MFCC calculation
                     if cancel_event and cancel_event.is_set():
                         return {}
-                    # Calculate mean for each MFCC coefficient, handling potential NaNs/Infs
+                    # Calculate mean per coefficient, handling NaNs/Infs.
                     for i in range(
                         min(n_mfcc_to_use, mfccs.shape[0])
                     ):  # Iterate over actual number of coefficients calculated
@@ -314,7 +322,8 @@ class AnalysisEngine:
                             )
                 else:
                     logger.warning(
-                        f"Mel spectrogram missing or empty for MFCC calculation: {basename}"
+                        "Mel spectrogram missing or empty for MFCC "
+                        f"calculation: {basename}"
                     )
             except Exception as e:
                 logger.warning(f"MFCCs failed for {basename}: {e}", exc_info=False)
@@ -325,7 +334,7 @@ class AnalysisEngine:
                 return {}
             if SOUNDFILE_AVAILABLE and sf is not None:
                 try:
-                    # Consider caching sf.info if called very frequently, though it's usually fast
+                    # sf.info is usually fast; caching can be added later if needed.
                     info = sf.info(file_path)
                     subtype_str = getattr(info, "subtype_info", "") or ""
                     match = re.search(r"(\d+)", subtype_str)  # Extract digits

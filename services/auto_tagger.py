@@ -195,11 +195,13 @@ class AutoTagService:
                         modified = True
                     else:
                         logger.debug(
-                            f"Ignoring potential BPM match '{bpm_val}' (out of range 50-300) in {filename}"
+                            "Ignoring potential BPM match "
+                            f"'{bpm_val}' (out of range 50-300) in {filename}"
                         )
                 except (ValueError, IndexError):
                     logger.warning(
-                        f"Could not convert potential BPM match '{bpm_match.group('bpm')}' to int in {filename}"
+                        "Could not convert potential BPM match "
+                        f"'{bpm_match.group('bpm')}' to int in {filename}"
                     )
 
         # --- 3. Filename-Based Tag Extraction ---
@@ -217,7 +219,9 @@ class AutoTagService:
                         tag_value_norm = tag_value.lower().replace("-", " ")
                     if tag_value_norm not in dim_tags:
                         logger.debug(
-                            f"Adding filename tag '{tag_value_norm}' to dimension '{dimension}' for: {filename}"
+                            "Adding filename tag "
+                            f"'{tag_value_norm}' to dimension '{dimension}' "
+                            f"for: {filename}"
                         )
                         dim_tags.append(tag_value_norm)
                         modified = True
@@ -238,7 +242,9 @@ class AutoTagService:
                         tag_value_norm = part_lower
                         if tag_value_norm not in dim_tags:
                             logger.debug(
-                                f"Adding folder tag '{tag_value_norm}' to dimension '{dimension}' for: {path}"
+                                "Adding folder tag "
+                                f"'{tag_value_norm}' to dimension '{dimension}' "
+                                f"for: {path}"
                             )
                             dim_tags.append(tag_value_norm)
                             modified = True

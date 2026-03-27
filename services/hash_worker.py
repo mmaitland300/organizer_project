@@ -3,9 +3,10 @@
 """
 HashWorker - dedicated QThread for computing MD5 hashes in the background.
 
-Receives a list of file-info dictionaries, computes the hash (using helpers.compute_hash)
-only when missing, and emits granular progress. Designed to be attached to longer‑running
-services like DuplicateFinderService or a future FileScanner stage.
+Receives a list of file-info dictionaries, computes the hash
+(using helpers.compute_hash) only when missing, and emits granular
+progress. Designed to be attached to longer-running services like
+DuplicateFinderService or a future FileScanner stage.
 """
 
 from __future__ import annotations
