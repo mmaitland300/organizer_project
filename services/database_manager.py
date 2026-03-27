@@ -1,6 +1,7 @@
 # services/database_manager.py
 """
-Singleton-style class to manage the application's SQLite database, with batch-write support.
+Singleton-style class to manage the application's SQLite database,
+with batch-write support.
 Handles new audio feature columns.
 """
 
@@ -51,8 +52,8 @@ STATS_CACHE_FILENAME = os.path.expanduser("~/.musicians_organizer_stats.json")
 
 class DatabaseManager:
     """
-    Manages SQLite database connection and provides methods to insert/update/select file records,
-    including new audio feature columns.
+    Manages SQLite database connection and provides methods to insert/update/select
+    file records, including new audio feature columns.
     """
 
     def __init__(self, engine: Engine):
@@ -64,7 +65,7 @@ class DatabaseManager:
         self._feature_stats: Optional[Dict[str, Dict[str, float]]] = None
         self.engine: Engine = engine
 
-        # Ensure engine is not None after init (already checked by type hint, but safety)
+        # Ensure engine is not None after init (type hint checked; extra safety)
         if self.engine is None:
             # This state should ideally not be reachable if called correctly
             logger.critical("DatabaseManager initialized without a valid engine!")
@@ -122,7 +123,8 @@ class DatabaseManager:
             params["tags"] = json.dumps(tags_data) if tags_data else "{}"
         except TypeError:
             logger.warning(
-                f"Could not serialize tags for {params['file_path']}, saving empty JSON.",
+                f"Could not serialize tags for {params['file_path']}, "
+                "saving empty JSON.",
                 exc_info=True,
             )
             params["tags"] = "{}"
@@ -159,7 +161,8 @@ class DatabaseManager:
             for col in files_table.columns
             if col.name not in ["id", "file_path"]  # Exclude PK and conflict target
             # Manually add auto-update columns if needed by the dialect/DB
-            # e.g. 'last_scanned': text("CURRENT_TIMESTAMP") # Usually handled by server_default/onupdate
+            # e.g. 'last_scanned': text("CURRENT_TIMESTAMP")
+            # Usually handled by server_default/onupdate
         }
 
         upsert_stmt = insert_stmt.on_conflict_do_update(
@@ -167,24 +170,20 @@ class DatabaseManager:
             set_=update_cols,  # Dictionary of columns to update
         )
 
-        logger.debug(
-            f"Attempting lock for save_file_record (SQLAlchemy): {file_info.get('path')}"
-        )
+        path = file_info.get("path")
+        logger.debug(f"Attempting lock for save_file_record (SQLAlchemy): {path}")
         try:
             with self._lock:  # Keep lock for thread safety
-                logger.debug(
-                    f"Lock ACQUIRED for save_file_record (SQLAlchemy): {file_info.get('path')}"
-                )
+                logger.debug(f"Lock ACQUIRED for save_file_record (SQLAlchemy): {path}")
                 with self.engine.connect() as connection:  # Get connection from engine
                     with connection.begin():  # Start transaction
                         connection.execute(upsert_stmt)  # Execute statement
-                logger.debug(
-                    f"Record saved/updated via SQLAlchemy for {file_info.get('path')}"
-                )
+                logger.debug(f"Record saved/updated via SQLAlchemy for {path}")
             logger.debug("Lock RELEASED for save_file_record (SQLAlchemy)")
         except Exception as e:
             logger.error(
-                f"Failed to save file record (SQLAlchemy) for {file_info.get('path')}. Params: {params}. Error: {e}",
+                f"Failed to save file record (SQLAlchemy) for {path}. "
+                f"Params: {params}. Error: {e}",
                 exc_info=True,
             )
 
@@ -212,20 +211,20 @@ class DatabaseManager:
             params_list.append(params)
 
         # --- NOTE: Batch UPSERT with ON CONFLICT DO UPDATE ---
-        # SQLAlchemy Core's default execute()/executemany() might not easily support
-        # batching the ON CONFLICT DO UPDATE clause efficiently across all DBAPIs/versions.
-        # The safest approach (though potentially slower than a true batch upsert if the
-        # DB supports it) is often to execute each upsert individually within a single transaction.
+        # SQLAlchemy Core's execute()/executemany() may not batch ON CONFLICT DO UPDATE
+        # efficiently across all DBAPIs/versions. The safest approach (slower than a
+        # true batch upsert where supported) is often one upsert per row in one txn.
 
+        n_batch = len(file_infos)
         logger.debug(
-            f"Attempting lock for batch save (SQLAlchemy) of {len(file_infos)} records."
+            f"Attempting lock for batch save (SQLAlchemy) of {n_batch} records."
         )
         saved_count = 0
         failed_count = 0
         try:
             with self._lock:  # Keep lock
                 logger.debug(
-                    f"Lock ACQUIRED for batch save (SQLAlchemy) of {len(file_infos)} records."
+                    f"Lock ACQUIRED for batch save (SQLAlchemy) of {n_batch} records."
                 )
                 with self.engine.connect() as connection:
                     with connection.begin():  # Single transaction for the batch
@@ -233,7 +232,8 @@ class DatabaseManager:
                             try:
                                 # Build the statement for each record inside the loop
                                 insert_stmt = sqlite_insert(files_table).values(params)
-                                update_cols = {  # Redefine update_cols based on current params if needed
+                                # Redefine update_cols per row if needed
+                                update_cols = {
                                     col.name: getattr(insert_stmt.excluded, col.name)
                                     for col in files_table.columns
                                     if col.name not in ["id", "file_path"]
@@ -246,13 +246,16 @@ class DatabaseManager:
                                 saved_count += 1
                             except Exception as inner_e:
                                 failed_count += 1
+                                fp = params.get("file_path", "N/A")
                                 logger.error(
-                                    f"Failed to save record in batch (SQLAlchemy). Path: {params.get('file_path', 'N/A')}. Error: {inner_e}",
+                                    f"Failed to save record in batch (SQLAlchemy). "
+                                    f"Path: {fp}. Error: {inner_e}",
                                     exc_info=False,
-                                )  # Log less verbosely for batch errors
-                                # Decide: continue batch or rollback? Continuing allows partial success.
+                                )  # Less verbose for batch errors
+                                # Continue without rollback for partial success.
                     logger.info(
-                        f"SQLAlchemy batch save attempt complete. Saved: {saved_count}, Failed: {failed_count}."
+                        "SQLAlchemy batch save attempt complete. "
+                        f"Saved: {saved_count}, Failed: {failed_count}."
                     )
             logger.debug("Lock RELEASED for batch save (SQLAlchemy)")
 
@@ -280,7 +283,8 @@ class DatabaseManager:
         """
         if not column_names or len(row) != len(column_names):
             logger.error(
-                f"Row length ({len(row)}) mismatch with column names ({len(column_names)})"
+                f"Row length ({len(row)}) mismatch with column names "
+                f"({len(column_names)})"
             )
             # Log row and names for debugging
             logger.debug(f"Row data: {row}")
@@ -303,9 +307,8 @@ class DatabaseManager:
                 else None
             )
         except (OSError, TypeError, ValueError) as e:
-            logger.warning(
-                f"Could not convert timestamp {mod_time_ts} for {file_info['path']}: {e}"
-            )
+            p = file_info["path"]
+            logger.warning(f"Could not convert timestamp {mod_time_ts} for {p}: {e}")
             file_info["mod_time"] = None  # Set to None if conversion fails
 
         file_info["duration"] = row_dict.get("duration")
@@ -319,12 +322,11 @@ class DatabaseManager:
         try:
             file_info["tags"] = json.loads(tags_text) if tags_text else {}
         except json.JSONDecodeError:
-            logger.warning(
-                f"Could not decode tags JSON for {file_info.get('path', 'Unknown')}: {tags_text}"
-            )
+            p = file_info.get("path", "Unknown")
+            logger.warning(f"Could not decode tags JSON for {p}: {tags_text}")
             file_info["tags"] = {}
-        # Optional: Include last_scanned timestamp if needed
-        # file_info["last_scanned"] = row_dict.get("last_scanned") # Assuming type affinity handles conversion
+        # Optional: Include last_scanned if needed
+        # file_info["last_scanned"] = row_dict.get("last_scanned")
 
         # --- Map feature columns ---
         for key in ALL_FEATURE_KEYS:
@@ -408,8 +410,9 @@ class DatabaseManager:
                 with self.engine.connect() as connection:
                     with connection.begin():  # Use transaction
                         result = connection.execute(delete_stmt)
+                        rc = result.rowcount
                         logger.info(
-                            f"Deleted {result.rowcount} record(s) (SQLAlchemy) for path: {file_path}"
+                            f"Deleted {rc} record(s) (SQLAlchemy) for path: {file_path}"
                         )
             logger.debug("Lock RELEASED for delete_file_record (SQLAlchemy)")
         except Exception as e:
@@ -419,7 +422,7 @@ class DatabaseManager:
             )
 
     def delete_files_in_folder(self, folder_path: str) -> None:
-        """Delete all files whose paths start with 'folder_path' using SQLAlchemy Core."""
+        """Delete files whose paths start with folder_path (SQLAlchemy Core)."""
         if not self.engine:
             logger.error(
                 "No SQLAlchemy engine available. Cannot delete files by folder."
@@ -434,28 +437,33 @@ class DatabaseManager:
         )
 
         logger.info(
-            f"Attempting to delete records (SQLAlchemy) with path prefix: {like_pattern}"
+            "Attempting to delete records (SQLAlchemy) with path prefix: "
+            f"{like_pattern}"
         )
         try:
             with self._lock:
                 logger.debug(
-                    f"Lock ACQUIRED for delete_files_in_folder (SQLAlchemy): {folder_path_norm}"
+                    "Lock ACQUIRED for delete_files_in_folder (SQLAlchemy): "
+                    f"{folder_path_norm}"
                 )
                 with self.engine.connect() as connection:
                     with connection.begin():  # Use transaction
                         result = connection.execute(delete_stmt)
+                        rc = result.rowcount
                         logger.info(
-                            f"Deleted {result.rowcount} old records (SQLAlchemy) matching prefix: {folder_path_norm}"
+                            f"Deleted {rc} old records (SQLAlchemy) matching "
+                            f"prefix: {folder_path_norm}"
                         )
             logger.debug("Lock RELEASED for delete_files_in_folder (SQLAlchemy)")
         except Exception as e:
             logger.error(
-                f"Failed to delete folder records (SQLAlchemy) for {folder_path_norm}: {e}",
+                f"Failed to delete folder records (SQLAlchemy) for "
+                f"{folder_path_norm}: {e}",
                 exc_info=True,
             )
 
     def get_files_in_folder(self, folder_path: str) -> List[Dict[str, Any]]:
-        """Return records whose file_path starts with the folder_path using SQLAlchemy Core."""
+        """Return records whose file_path starts with folder_path (SQLAlchemy Core)."""
         if not self.engine:
             return []
         results = []
@@ -471,25 +479,30 @@ class DatabaseManager:
         try:
             with self._lock:
                 logger.debug(
-                    f"Lock ACQUIRED for get_files_in_folder (SQLAlchemy): {folder_path_norm}"
+                    "Lock ACQUIRED for get_files_in_folder (SQLAlchemy): "
+                    f"{folder_path_norm}"
                 )
                 with self.engine.connect() as connection:
                     cursor_result = connection.execute(select_stmt)
                     column_names = self._get_column_names(cursor_result)
                     if not column_names:
                         logger.error(
-                            f"Failed to get column names for get_files_in_folder({folder_path_norm}) (SQLAlchemy)."
+                            "Failed to get column names for "
+                            f"get_files_in_folder({folder_path_norm}) (SQLAlchemy)."
                         )
                         return []
                     rows = cursor_result.fetchall()
                     results = [self._row_to_dict(row, column_names) for row in rows]
                     logger.debug(
-                        f"Fetched {len(results)} records (SQLAlchemy) matching prefix: {folder_path_norm}"
+                        "Fetched "
+                        f"{len(results)} records (SQLAlchemy) matching prefix: "
+                        f"{folder_path_norm}"
                     )
             logger.debug("Lock RELEASED for get_files_in_folder (SQLAlchemy)")
         except Exception as e:
             logger.error(
-                f"Failed to fetch folder records (SQLAlchemy) for {folder_path_norm}: {e}",
+                f"Failed to fetch folder records (SQLAlchemy) for "
+                f"{folder_path_norm}: {e}",
                 exc_info=True,
             )
         return results
@@ -530,8 +543,8 @@ class DatabaseManager:
     # --- Internal Statistics Calculation (Safe with RLock) ---
     def _calculate_feature_statistics(self) -> Dict[str, Dict[str, float]]:
         """
-        Calculates feature statistics (count, mean, std dev) using SQL aggregates via SQLAlchemy Core.
-        Excludes non-numeric features or features deemed unsuitable for std dev (e.g., bit_depth).
+        Calculates feature statistics (count, mean, std dev) via SQLAlchemy Core
+        aggregates. Excludes non-numeric or unsuitable features (e.g. bit_depth).
         """
         if not self.engine:
             logger.error("Cannot calculate stats: No SQLAlchemy engine.")
@@ -542,9 +555,8 @@ class DatabaseManager:
             key for key in ALL_FEATURE_KEYS if key != "bit_depth"  # Example exclusion
         ]
 
-        logger.info(
-            f"Calculating feature statistics using SQLAlchemy for keys: {features_for_stats_calc}"
-        )
+        keys = features_for_stats_calc
+        logger.info(f"Calculating feature statistics using SQLAlchemy for keys: {keys}")
         logger.debug("Attempting lock for _calculate_feature_statistics (RLock)...")
         try:
             with self._lock:
@@ -555,12 +567,13 @@ class DatabaseManager:
                     with connection.begin():  # Start a transaction
                         for feature_key in features_for_stats_calc:
                             # Use text() for raw SQL aggregates
-                            # Using :feature_key binds doesn't work directly in COUNT/SUM/AVG
-                            # So we need to carefully construct the SQL string.
+                            # :feature_key binds don't work directly in COUNT/SUM/AVG
+                            # So we construct the SQL string carefully.
                             # Ensure feature_key is just the column name for safety.
                             if not feature_key.isidentifier():  # Basic safety check
                                 logger.warning(
-                                    f"Skipping potentially unsafe feature key for stats: {feature_key}"
+                                    "Skipping potentially unsafe feature key for "
+                                    f"stats: {feature_key}"
                                 )
                                 continue
 
@@ -571,7 +584,8 @@ class DatabaseManager:
                                     SUM("{feature_key}"),
                                     SUM("{feature_key}" * "{feature_key}")
                                 FROM files
-                                WHERE "{feature_key}" IS NOT NULL AND ABS("{feature_key}") < 1e30
+                                WHERE "{feature_key}" IS NOT NULL
+                                    AND ABS("{feature_key}") < 1e30
                             """
                             )  # Use text() and quote identifier
 
@@ -605,7 +619,8 @@ class DatabaseManager:
                                             std_dev = 0.0
                             except Exception as e:
                                 logger.error(
-                                    f"Error calculating stats via SQLAlchemy for feature '{feature_key}': {e}",
+                                    "Error calculating stats via SQLAlchemy for "
+                                    f"feature '{feature_key}': {e}",
                                     exc_info=True,
                                 )
 
