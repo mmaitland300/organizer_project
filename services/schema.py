@@ -24,7 +24,7 @@ except ImportError:
         "Could not import feature keys from settings. Using fallback list.",
         exc_info=True,
     )
-    # Fallback ONLY if settings cannot be imported (ensure this list *exactly* matches settings.py)
+    # Fallback only if settings import fails; keep aligned with settings.py.
     _ORIGINAL_FALLBACK = [
         "brightness",
         "loudness_rms",
@@ -32,7 +32,12 @@ except ImportError:
         "spectral_contrast_mean",
         *(f"mfcc{i+1}_mean" for i in range(13)),  # Assuming 13 MFCCs
     ]
-    ADDITIONAL_FEATURE_KEYS = ["bit_depth", "loudness_lufs", "pitch_hz", "attack_time"]
+    ADDITIONAL_FEATURE_KEYS = [
+        "bit_depth",
+        "loudness_lufs",
+        "pitch_hz",
+        "attack_time",
+    ]
     ALL_FEATURE_KEYS = _ORIGINAL_FALLBACK + ADDITIONAL_FEATURE_KEYS
 
 

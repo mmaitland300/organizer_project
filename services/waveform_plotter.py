@@ -50,4 +50,4 @@ class WaveformPlotter:
                 wrap=True,
                 color="red",
             )
-            # raise # Re-raising might crash the dialog, handle gracefully in UI if needed
+            # Avoid re-raising here; it can crash the dialog in normal UI usage.

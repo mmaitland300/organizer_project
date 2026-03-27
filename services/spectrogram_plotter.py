@@ -67,7 +67,10 @@ class SpectrogramPlotter:
 
     @staticmethod
     def _apply_theme_to_axes(
-        ax: Axes, figure: Figure, theme: str, colorbar: Optional[Any] = None  # type: ignore
+        ax: Axes,
+        figure: Figure,
+        theme: str,
+        colorbar: Optional[Any] = None,  # type: ignore
     ):
         """Applies theme colors to the plot elements for better readability."""
         if not ax or not figure:
@@ -115,7 +118,12 @@ class SpectrogramPlotter:
             logger.error(f"Error applying theme to axes: {theme_err}", exc_info=False)
 
     @staticmethod
-    def plot(file_path: str, ax: Axes, figure: Figure, theme: str = "light") -> bool:  # type: ignore
+    def plot(
+        file_path: str,
+        ax: Axes,
+        figure: Figure,
+        theme: str = "light",
+    ) -> bool:  # type: ignore
         """
         Generates and displays the spectrogram for the given audio file path
         onto the provided Matplotlib Axes.
@@ -174,7 +182,8 @@ class SpectrogramPlotter:
                 logger.error("SpectrogramService class unavailable at runtime.")
                 return False
             service = SpectrogramServiceClass()
-            # Using load_duration=None to attempt loading full file (service might have internal limit)
+            # load_duration=None attempts full file load
+            # (service may still apply internal limits).
             spec_data = service.get_spectrogram_data(file_path, load_duration=None)
         except Exception as e:
             logger.error(f"Error getting spectrogram data: {e}", exc_info=True)

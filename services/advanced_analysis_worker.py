@@ -15,7 +15,6 @@ import logging
 import os
 import threading
 import traceback
-from multiprocessing import Event as MPEvent
 from multiprocessing import Manager
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -41,7 +40,9 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _analyze_file_process_worker(file_info: Dict[str, Any], cancel_event: MPEvent) -> Optional[Dict[str, Any]]:  # type: ignore
+def _analyze_file_process_worker(
+    file_info: Dict[str, Any], cancel_event: Any
+) -> Optional[Dict[str, Any]]:
     path = file_info.get("path", "Unknown Path")
     try:
         if cancel_event.is_set():
@@ -151,7 +152,8 @@ class AdvancedAnalysisWorker(QtCore.QThread):
                     with self._lock:
                         if self._cancelled:
                             logger.info(
-                                "Cancellation detected after processEvents, breaking loop."
+                                "Cancellation detected after processEvents; "
+                                "breaking loop."
                             )
                             run_cancelled = True
                             break
@@ -188,9 +190,8 @@ class AdvancedAnalysisWorker(QtCore.QThread):
             final_results = [results_map.get(fi["path"], fi) for fi in self._files_orig]
             with self._lock:
                 is_cancelled = self._cancelled
-            logger.info(
-                f"Analysis run finished - {'Cancelled' if is_cancelled else 'Completed normally'}."
-            )
+            run_state = "Cancelled" if is_cancelled else "Completed normally"
+            logger.info(f"Analysis run finished - {run_state}.")
             self.analysisComplete.emit(final_results)  # Emit renamed data signal
 
         except Exception as exc:

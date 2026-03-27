@@ -67,7 +67,7 @@ class SpectrogramService:
         logger.info(
             f"SpectrogramService initialized with cache size: {SPECTROGRAM_CACHE_SIZE}"
         )
-        # Clear cache upon initialization if desired (e.g., for testing or specific lifecycle)
+        # Clear cache on init (useful for testing and predictable lifecycle behavior).
         self._compute_spectrogram_data.cache_clear()
 
     @staticmethod
@@ -78,14 +78,17 @@ class SpectrogramService:
         hop_length: int,
         win_length: Optional[int],
         window: str,
-        load_duration: Optional[float] = 30.0,  # Optional: Limit loading duration
+        load_duration: Optional[float] = 30.0,  # Limit loading duration
     ) -> Dict[str, Any]:
         """
-        Private static method that performs the actual audio loading and STFT calculation.
-        Results are cached based on input arguments.
+        Private static method that performs audio loading and STFT calculation.
+        Results are cached by input arguments.
         """
         logger.debug(
-            f"Computing spectrogram for: {os.path.basename(file_path)} with params: n_fft={n_fft}, hop={hop_length}, win={win_length}, window='{window}'"
+            "Computing spectrogram for: "
+            f"{os.path.basename(file_path)} with params: "
+            f"n_fft={n_fft}, hop={hop_length}, "
+            f"win={win_length}, window='{window}'"
         )
         results: Dict[str, Any] = {
             "y": None,
@@ -97,7 +100,7 @@ class SpectrogramService:
             "hop_length": hop_length,
             "win_length": (
                 win_length if win_length is not None else n_fft
-            ),  # Store actual win_length used
+            ),  # Actual win_length used
             "window": window,
             "error": None,
         }
@@ -134,7 +137,7 @@ class SpectrogramService:
             # results['power'] = S_power
 
             # Compute Mel Spectrogram (often used for features like MFCCs)
-            # n_mels can be added as a parameter if needed
+            # n_mels can be added as a parameter later.
             S_mel = librosa.feature.melspectrogram(
                 S=S_magnitude**2,  # Pass power spectrogram to melspectrogram
                 sr=sr,
@@ -175,13 +178,13 @@ class SpectrogramService:
         Args:
             file_path (str): Path to the audio file.
             load_duration (Optional[float]): Max duration to load (default 30s).
-            **stft_params_override: Keyword arguments to override default STFT parameters
-                                     (n_fft, hop_length, win_length, window).
+            **stft_params_override: Keyword args to override default STFT params
+                (n_fft, hop_length, win_length, window).
 
         Returns:
-            Dict[str, Any]: Dictionary containing spectrogram data ('magnitude', 'mel', 'sr', etc.)
-                            or an 'error' key if calculation failed. Returns empty dict if
-                            dependencies (numpy, librosa) are missing.
+            Dict[str, Any]: Spectrogram data ('magnitude', 'mel', 'sr', etc.) or
+                an 'error' key on failure. Returns empty dict if dependencies
+                (numpy, librosa) are missing.
         """
         if not NUMPY_AVAILABLE or not LIBROSA_AVAILABLE:
             logger.warning(
@@ -219,7 +222,8 @@ class SpectrogramService:
         # Optionally check for errors in the results and log/handle them
         if results.get("error"):
             logger.warning(
-                f"Spectrogram data retrieval failed for {os.path.basename(file_path)}: {results['error']}"
+                "Spectrogram data retrieval failed for "
+                f"{os.path.basename(file_path)}: {results['error']}"
             )
             # Decide return strategy: return dict with error, or empty dict?
             # Returning dict with error key is more informative.

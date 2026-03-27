@@ -132,7 +132,8 @@ class FileScannerService(QtCore.QThread):
                     except Exception as path_e:
                         walk_error_count += 1
                         logger.error(
-                            f"Error constructing path in {dirpath} for file {f}: {path_e}",
+                            "Error constructing path in "
+                            f"{dirpath} for file {f}: {path_e}",
                             exc_info=False,
                         )
                 if self._cancelled:
@@ -193,8 +194,9 @@ class FileScannerService(QtCore.QThread):
                         cached.setdefault("tags", {})
                         cached.setdefault("samplerate", None)
                         cached.setdefault("channels", None)
-                        # Add feature keys if they might be missing from old cache?
-                        # for f_key in ALL_FEATURE_KEYS: cached.setdefault(f_key, None) # If needed
+                        # Add feature keys if missing from old cache when needed.
+                        # for f_key in ALL_FEATURE_KEYS:
+                        #     cached.setdefault(f_key, None)
                         files_info.append(cached)
                         needs_processing = False
                         file_data_source = "Cache"
@@ -237,7 +239,7 @@ class FileScannerService(QtCore.QThread):
                         "samplerate": None,
                         "channels": None,
                         "bpm": None,
-                        # Initialize feature keys? Not strictly needed if DB allows NULLs
+                        # Feature keys default to NULL in DB if not set here.
                     }
 
                     # TinyTag metadata
@@ -271,7 +273,8 @@ class FileScannerService(QtCore.QThread):
             # --- Error Handling for Individual Files ---
             except FileNotFoundError:
                 logger.warning(
-                    f"File not found during processing (likely deleted after walk): {full_path}"
+                    "File not found during processing "
+                    f"(likely deleted after walk): {full_path}"
                 )
                 # Remove from seen_paths if it was added but now missing
                 if full_path in seen_paths:
@@ -284,7 +287,8 @@ class FileScannerService(QtCore.QThread):
                 )
             except Exception as e:
                 logger.error(
-                    f"Unexpected error processing file {full_path}: {e}", exc_info=True
+                    f"Unexpected error processing file {full_path}: {e}",
+                    exc_info=True,
                 )
 
             # --- Emit Progress ---
@@ -294,7 +298,7 @@ class FileScannerService(QtCore.QThread):
             ):
                 if total_files > 0:
                     logger.debug(
-                        f"Emitting scan progress: {current_count}/{total_files}"
+                        "Emitting scan progress: " f"{current_count}/{total_files}"
                     )
                     self.progress.emit(current_count, total_files)
                 # If total_files is 0, this loop won't run, handled earlier.
@@ -302,13 +306,14 @@ class FileScannerService(QtCore.QThread):
 
         if self._cancelled:
             logger.info("Scan cancelled before final operations.")
-            # Cache might have partial updates, flushing might be okay or skip? Skip for now.
+            # Cache may contain partial updates on cancellation; skip flush here.
             self.finished.emit(files_info)  # Emit whatever was collected
             return
 
         # --- Final Operations ---
         logger.info(
-            "File processing finished. Finalizing cache, saving records, deleting orphans."
+            "File processing finished. Finalizing cache, "
+            "saving records, deleting orphans."
         )
         try:
             if self.cache_manager:
@@ -338,14 +343,15 @@ class FileScannerService(QtCore.QThread):
                         f"Error deleting orphan record {orphan}: {del_e}", exc_info=True
                     )
             logger.info(
-                f"Finished deleting {deleted_count} of {len(orphan_paths)} orphan records."
+                "Finished deleting "
+                f"{deleted_count} of {len(orphan_paths)} orphan records."
             )
         else:
             logger.info("No orphan records found to delete.")
 
         # --- Final Signals ---
         logger.info("Sending final progress and finished signals.")
-        # Use the actual number processed for final progress if total_files was 0 initially
+        # Use actual processed count if total_files was initially 0.
         final_total = total_files if total_files > 0 else current_count
         final_current = current_count  # current_count reflects processed items
         if final_total >= 0:
