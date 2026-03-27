@@ -39,3 +39,11 @@ cleanup passes.
 - Non-`E501` findings are currently zero in the scoped command.
 - Highest-churn files are `services/database_manager.py` and `models/file_model.py`,
   which is why they are split into dedicated passes.
+
+## Non-E501 Final Pass Check
+
+- Branch: `lint/non-e501-final-pass`
+- Command:
+  - `.\.venv\Scripts\python.exe -m flake8 config services models utils main.py`
+- Result:
+  - `NON_E501=0`
