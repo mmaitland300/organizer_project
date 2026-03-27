@@ -767,7 +767,8 @@ class DatabaseManager:
             self._calculate_feature_statistics()
         )  # This method handles its own RLock via 'with'
 
-        # 4. Update caches if calculation succeeded (brief lock for memory, no lock for file)
+        # 4. Update caches if calculation succeeded (brief lock for memory,
+        # no lock for file)
         if calculated_stats:
             logger.info(
                 "Calculation successful. Updating memory cache and saving to file..."
@@ -782,7 +783,8 @@ class DatabaseManager:
             self._save_stats_to_file_unsafe(calculated_stats)
         else:
             logger.error(
-                "Statistics calculation failed. Using potentially stale or no statistics."
+                "Statistics calculation failed. "
+                "Using potentially stale or no statistics."
             )
             # Do not update memory or file cache if calculation failed
 
@@ -809,15 +811,18 @@ class DatabaseManager:
             return []
 
         logger.info(
-            f"Finding files similar to ID: {reference_file_id} (UNSCALED, SQLAlchemy)"
+            f"Finding files similar to ID: {reference_file_id} "
+            "(UNSCALED, SQLAlchemy)"
         )
         logger.debug(
-            f"Attempting lock for find_similar_files_unscaled (SQLAlchemy): {reference_file_id}"
+            "Attempting lock for find_similar_files_unscaled (SQLAlchemy): "
+            f"{reference_file_id}"
         )
         try:
             with self._lock:
                 logger.debug(
-                    f"Lock ACQUIRED for find_similar_files_unscaled (SQLAlchemy): {reference_file_id}"
+                    "Lock ACQUIRED for find_similar_files_unscaled (SQLAlchemy): "
+                    f"{reference_file_id}"
                 )
                 # 1. Get reference features
                 ref_dict = self.get_file_record_by_id(reference_file_id)
@@ -826,7 +831,8 @@ class DatabaseManager:
                 ref_features = {key: ref_dict.get(key) for key in ALL_FEATURE_KEYS}
                 if any(v is None for v in ref_features.values()):
                     logger.warning(
-                        f"Reference file ID {reference_file_id} missing some feature values. Cannot perform unscaled similarity."
+                        f"Reference file ID {reference_file_id} missing some "
+                        "feature values. Cannot perform unscaled similarity."
                     )
                     return []
 
@@ -837,8 +843,8 @@ class DatabaseManager:
                     if not key.isidentifier():
                         continue  # Safety check
                     param_name = f"ref_{key}"
-                    # Ensure column names are quoted if needed (using double quotes is standard)
-                    # Use standard SQL POW and COALESCE functions if available, otherwise adapt syntax
+                    # Quote column names with double quotes where needed
+                    # Use SQL POW/COALESCE; adapt syntax if the dialect differs
                     distance_parts.append(
                         f'POW(COALESCE("{key}", 0) - :{param_name}, 2)'
                     )
@@ -878,7 +884,7 @@ class DatabaseManager:
                 with self.engine.connect() as connection:
                     cursor_result = connection.execute(text(sim_sql_str), params)
                     sim_col_names = self._get_column_names(cursor_result)
-                    similar_rows = cursor_result.fetchall()  # type: ignore[assignment] # Add ignore if needed
+                    similar_rows = cursor_result.fetchall()  # type: ignore[assignment]
 
                 # 4. Format Results
                 similar_files = []
@@ -910,7 +916,8 @@ class DatabaseManager:
             logger.debug("Lock RELEASED for find_similar_files_unscaled (SQLAlchemy)")
         except Exception as e:
             logger.error(
-                f"Failed unscaled similarity search (SQLAlchemy) for ID {reference_file_id}: {e}",
+                "Failed unscaled similarity search (SQLAlchemy) for ID "
+                f"{reference_file_id}: {e}",
                 exc_info=True,
             )
             return []
@@ -920,8 +927,8 @@ class DatabaseManager:
         self, reference_file_id: int, num_results: int = 10
     ) -> List[Dict[str, Any]]:
         """
-        Finds files similar using Z-score scaled features and Euclidean distance (Python calc).
-        Fetches data using SQLAlchemy Core.
+        Finds files similar using Z-score scaled features and Euclidean distance
+        (Python calc). Fetches data using SQLAlchemy Core.
         """
         if not self.engine:  # Check engine first
             logger.error(
@@ -974,12 +981,14 @@ class DatabaseManager:
         # 4. Fetch Candidate Files' Features using SQLAlchemy
         candidate_files_data = []
         logger.debug(
-            f"Attempting lock for candidate fetch (SQLAlchemy) for ID {reference_file_id}"
+            "Attempting lock for candidate fetch (SQLAlchemy) for ID "
+            f"{reference_file_id}"
         )
         try:
             with self._lock:
                 logger.debug(
-                    f"Lock ACQUIRED for candidate fetch (SQLAlchemy) for ID {reference_file_id}"
+                    "Lock ACQUIRED for candidate fetch (SQLAlchemy) for ID "
+                    f"{reference_file_id}"
                 )
                 with self.engine.connect() as connection:
                     # Build select list and where clause safely
@@ -1008,7 +1017,8 @@ class DatabaseManager:
 
                     if not column_names:
                         logger.error(
-                            "Failed to get column names for candidate query (SQLAlchemy)."
+                            "Failed to get column names for candidate query "
+                            "(SQLAlchemy)."
                         )
                         return []
 
@@ -1016,7 +1026,8 @@ class DatabaseManager:
                     for row in rows:
                         candidate_files_data.append(dict(zip(column_names, row)))
             logger.debug(
-                f"Lock RELEASED for candidate fetch (SQLAlchemy) for ID {reference_file_id}"
+                "Lock RELEASED for candidate fetch (SQLAlchemy) for ID "
+                f"{reference_file_id}"
             )
         except Exception as e:
             logger.error(
@@ -1064,8 +1075,11 @@ class DatabaseManager:
                 )
 
         # 6. Sort Results and Return Top N
-        results_with_distance.sort(key=lambda x: x["distance"])  # type: ignore[arg-type, return-value]
+        results_with_distance.sort(
+            key=lambda x: x["distance"],  # type: ignore[arg-type, return-value]
+        )
         logger.info(
-            f"Found {len(results_with_distance)} similar files. Returning top {num_results}."
+            f"Found {len(results_with_distance)} similar files. "
+            f"Returning top {num_results}."
         )
         return results_with_distance[:num_results]
